@@ -1,0 +1,819 @@
+= C4 Plan Format
+:revdate: 2026-05-03
+:toc: macro
+:toclevels: 2
+:icons: font
+:source-highlighter: rouge
+
+The format defines **two layers of representation**, both driven by the
+same sparse-workflow Ralph loop:
+
+* **The index layer** (`index.adoc`) — a parsable Structurizr DSL block
+  capturing the problem space at C4 resolution: actors, software systems,
+  containers, components, their relations, and the technology constraints.
+  The DSL is the canonical overview; it declares which task documents
+  exist and what they're for via element `properties`.
+* **The task layer** (sibling `.adoc` files) — human-readable detail at
+  the code / pseudo-code / BDD level. Each task file is referenced from
+  the DSL and holds the body of work for one decomposed unit.
+
+Both layers are sparse-workflow targets: each file evolves on its own Git
+branch; each commit on those branches captures a knowledge or decision
+step in the audit trail. The DSL drives task-file creation (a new element
+with a `properties { "detail" "..." }` reference means a new task
+workflow); branch hierarchy mirrors the DSL's C4 nesting via stable slug
+properties, with all index evolution serialised on a single canonical
+branch (R14.7) and assets evolving on per-asset branches.
+
+The controller-side requirements for this format are codified as **R14**
+in `sparse-workflow.md` ("C4 plan format adapter"). This document
+specifies the *format* that R14 operates on; `sparse-workflow.md` remains
+normative for the controller, eval contract, escalation ladder, sandbox
+isolation, trust model, and Ralph loop.
+
+toc::[]
+
+== File layout
+
+The folder is flat. One canonical document, plus optional detail files
+referenced from it.
+
+----
+plan/
+|-- index.adoc                <1>
+|-- web-app.adoc              <2>
+|-- api-server.adoc
+|-- auth-middleware.adoc
+|-- dispatch-controller.adoc
+|-- auth-bdd.adoc             <3>
+|-- dispatch-bdd.adoc
+|-- auth-impl.adoc            <4>
+`-- ...
+----
+<1> The single canonical document. Contains an embedded Structurizr DSL
+    block holding the full C4 model. Always present, always exactly one
+    per project.
+<2> Detail `.adoc` for a DSL element. Referenced from the DSL via a
+    `properties { "detail" "web-app.adoc" }` block on the corresponding
+    element. Created lazily — only when an element needs human-readable
+    detail beyond what fits in DSL fields.
+<3> Asset `.adoc` (BDD scenarios in this case). Referenced from the DSL via
+    `properties { "bdd" "auth-bdd.adoc" }`. Multiple asset kinds are
+    supported; the property key determines the asset's role.
+<4> Implementation-plan asset (`impl` key). MUST carry a `[task]` block
+    declaring `writable_globs` (the source files the implementation
+    agent may write); see "Implementation assets" below.
+
+[NOTE]
+====
+There is exactly one `index.adoc` (at the project root). No sub-folders,
+no per-element index files. All structural relationships live in the DSL;
+all revision history lives in Git branches.
+
+Filenames are derived from the DSL element's `"slug"` property
+(R14.3 in `sparse-workflow.md`) and MUST be unique project-wide. Slugs
+are validated for uniqueness within a parent's children at parse time;
+the typical filename convention is `<slug>-<asset-key>.adoc` or just
+`<slug>.adoc` when only one asset key is in use.
+====
+
+== `index.adoc` anatomy
+
+[source,asciidoc]
+------
+= <Project name>
+:slug: <project-slug>
+:phase: spec                              // index is always :phase: spec
+:branch: agent/<project-slug>/_index      // _index suffix; see R14.6
+:status: ◎
+:pairing: c4-context-designer             // optional; governs index evolution only
+
+<Optional prose: project context, motivation, anything that doesn't
+belong in the DSL but a human reading the file should see first.>
+
+[source,structurizr]
+----
+workspace "<Project name>" {
+    model {
+        // tag::actor-end-user[]
+        endUser = person "End User" {
+            properties {
+                "slug" "end-user"
+            }
+        }
+        // end::actor-end-user[]
+
+        // tag::system[]
+        platform = softwareSystem "<Project name>" {
+            properties {
+                "slug" "<project-slug>"
+            }
+            // tag::container-api[]
+            api = container "API Server" {
+                technology "Fastify (TypeScript)"
+                properties {
+                    "slug"   "api"            // immutable; drives branch path
+                    "detail" "api-server.adoc"
+                }
+
+                // tag::component-auth[]
+                authComp = component "Auth Middleware" {
+                    technology "JWT verification"
+                    properties {
+                        "slug"   "auth-middleware"
+                        "detail" "auth-middleware.adoc"
+                        "bdd"    "auth-bdd.adoc"
+                    }
+                }
+                // end::component-auth[]
+            }
+            // end::container-api[]
+        }
+        // end::system[]
+
+        endUser -> platform "Receives notifications via"
+    }
+
+    views {
+        systemContext platform { include * }
+        container platform { include * }
+        component api { include * }
+    }
+}
+----
+------
+
+Notes on conventions:
+
+* The `[source,structurizr]` block holds the canonical Structurizr DSL.
+  Standard Structurizr syntax; nothing is invented here.
+* Each DSL element of interest is wrapped in `// tag::<name>[]` ...
+  `// end::<name>[]` comments. These tagged regions are extracted by the
+  controller via `include::index.adoc[tag=<name>]` (R14.14) when an asset
+  needs the parent element's spec as readonly context.
+* Every workflow-spawning DSL element MUST declare an immutable `"slug"`
+  property (R14.3). Branch paths derive from the chain of slug properties
+  walking up the DSL; display names and DSL identifiers can change without
+  breaking branches or filenames.
+* `properties { ... }` blocks on DSL elements point at sibling `.adoc`
+  files. See "Standard property keys" below.
+* Header attributes track the index file's own sparse-workflow state.
+  Note `:branch:` ends in `/_index` (R14.6).
+
+== Slug property and element-path derivation
+
+Every DSL element that spawns workflows MUST declare an immutable
+`"slug"` property. The slug is the canonical identifier for that element
+across the format: it appears in the element's branch path, in derived
+filenames, and in the dotted `Task:` trailer.
+
+* **Form**: kebab-case (`auth-middleware`, `dispatch-controller`).
+* **Uniqueness**: required to be unique within the parent's children.
+  Validated by the controller at parse time; collisions are scaffold
+  errors (R14.3).
+* **Immutability**: once an element has been committed with a `"slug"`,
+  the slug is part of the project's audit identity. Renaming it is a
+  breaking change handled by R14.9 (rename lifecycle).
+* **DSL identifier independence**: `authComp = component "Auth Middleware"
+  { properties { "slug" "auth-middleware" } }` — the DSL identifier
+  (`authComp`), the display name (`"Auth Middleware"`), and the slug
+  (`auth-middleware`) are three independent identities. Only the slug is
+  load-bearing for branch / filename derivation. The other two can change
+  freely.
+
+The **element path** for a DSL element is the dot-joined chain of
+ancestor slugs from the project root, exclusive of the element's own
+slug. E.g., for `authComp` (slug `auth-middleware`) inside `api` (slug
+`api`) inside the project (slug `notification-platform`), the element
+path is `api`. The full slug-chain is
+`notification-platform.api.auth-middleware`.
+
+Branch path: dot-to-slash translation:
+`agent/notification-platform/api/auth-middleware/<asset-key|_index>`.
+
+Dotted form (used in `Task:` trailer):
+`notification-platform.api.auth-middleware.<asset-key>`.
+
+== Standard property keys
+
+Two categories: **asset-reference** keys (value is a sibling `.adoc`
+filename; spawns a workflow on that file) and **metadata** keys (value
+is inline content; consumed by the orchestrator without spawning a
+workflow).
+
+=== Asset-reference keys
+
+[%autowidth]
+|===
+| Key | Asset role | Typical content
+
+| `detail`
+| Narrative spec for the element
+| Purpose, responsibility boundary, acceptance criteria, pseudo-code
+
+| `bdd`
+| Behavior specification
+| Gherkin scenarios in `[source,gherkin]` blocks
+
+| `tests`
+| Test specification
+| Unit-test enumeration, coverage targets, edge cases
+
+| `impl`
+| Implementation plan + code-write task
+| Pseudo-code, file/function inventory, integration points; carries a
+  `[task]` block declaring `writable_globs`; the agent transitions the
+  asset to `:phase: impl` to run the implementation
+|===
+
+Custom asset-reference keys are permitted; the orchestrator treats any
+property whose value ends in `.adoc` as a sibling file reference and
+spawns a workflow on it (R14.4). A team-defined key like `"threat-model"`
+or `"runbook"` works without controller changes.
+
+A single DSL element MUST NOT carry two properties with the same standard
+asset key — no two `bdd` properties on one element (R14.13). If you need
+multiple assets of the same role, decompose the element into children, or
+use distinct custom keys (`"bdd-main"`, `"bdd-edge-cases"`).
+
+Example multi-asset element:
+
+[source,structurizr]
+----
+component "Auth Middleware" {
+    properties {
+        "slug"   "auth-middleware"
+        "detail" "auth-middleware.adoc"
+        "bdd"    "auth-bdd.adoc"
+        "tests"  "auth-tests.adoc"
+        "impl"   "auth-impl.adoc"
+    }
+}
+----
+
+Each referenced `.adoc` is an independent sparse-workflow target with its
+own branch and Ralph loop.
+
+=== Metadata keys
+
+[%autowidth]
+|===
+| Key | Value | Used for
+
+| `slug`
+| Kebab-case identifier
+| Canonical immutable identity; required on every workflow-spawning
+  element (R14.3); drives branch path and filename derivation
+
+| `skills`
+| Comma-separated tags
+| Hint to the orchestrator agent for pairing selection when `:pairing:`
+  is unset on the asset. Example tags: `typescript`, `security-review`,
+  `database-migration`, `react-frontend`. Vocabulary is project-defined.
+|===
+
+Metadata keys do not spawn workflows. They surface inline metadata to
+the controller and orchestrator at spawn time.
+
+== Property lifecycle
+
+When `index.adoc` commits change asset-reference properties, the
+controller applies the rules in R14.9. Summarised:
+
+[%autowidth]
+|===
+| Index commit changes... | Controller action
+
+| Adds an asset-reference property
+| Spawn a workflow on the new asset branch; create the asset `.adoc` file
+  if absent
+
+| Removes an asset-reference property whose branch has no `●`
+| Mark the asset as deferred (`⊘`); leave the branch in place for
+  forensic value
+
+| Removes an asset-reference property whose branch HAS a `●`
+| Emit `failure_class: upstream-constraint`; HANDOFF naming the
+  orphaned asset; do NOT auto-delete the branch (per R12.7, cascade
+  rollback is human-driven)
+
+| Renames an asset-reference value where the source DSL element's slug
+  is unchanged
+| Treat as a filename change only; rename the file in the asset branch's
+  next commit
+
+| Renames an asset-reference value AND the slug changes
+| Spawn a new asset workflow at the new slug; archive the old branch
+  (`refs/archive/...`)
+|===
+
+The controller's slug-renaming behavior is the same: a slug change
+forks a new identity; the old branch is archived rather than rewritten.
+
+== Pairing assignment
+
+The `:pairing:` attribute on an `index.adoc` or detail `.adoc` is **optional**.
+
+* **Static assignment.** Set `:pairing: <pairing-name>` to pin a specific
+  pairing from `.claude/scaffold-pairings/`. Author or planning agent
+  picks; the controller honours the choice without inference.
+* **Dynamic assignment.** Omit `:pairing:` to delegate the choice to the
+  orchestrator agent. The orchestrator infers a pairing from the DSL
+  element's `technology` field, the asset key (`detail` / `bdd` / `impl`
+  / ...), the `:phase:`, and any `"skills"` metadata property on the
+  element.
+
+The `:pairing:` on `index.adoc` governs only the index-evolution
+workflow itself (R14.15). Asset `.adoc` files have independent pairings;
+the index pairing does not propagate to assets.
+
+The orchestrator agent — its catalogue lookup, its inference rules, its
+fallback behaviour when no pairing matches — is **out of scope for this
+spec**. It is a separate sparse-workflow component to be designed in its
+own brainstorming session. This format only guarantees that enough
+metadata is available for an orchestrator to make the decision.
+
+== Detail `.adoc` anatomy
+
+Minimum structure for any `.adoc` referenced from a DSL property. All
+sections beyond the header are optional; populate what's relevant for
+the asset's role.
+
+[source,asciidoc]
+------
+= <Element name> — <asset role>
+:slug: <project-slug>.<element-path>.<asset-key>
+:dsl-element: api.authComp                <1>
+:dsl-tag: component-auth                  <2>
+:phase: spec
+:branch: agent/<project-slug>/<element-path>/<asset-key>
+:status: ◎
+:pairing: implementer-with-bdd-tests      // optional; see "Pairing assignment"
+
+== Purpose
+<One paragraph; what this asset is for, why it exists.>
+
+== Body
+<Whatever the asset's role demands: BDD scenarios, pseudo-code,
+narrative spec, test list. Use `[source,gherkin]`,
+`[source,pseudocode]`, etc. as appropriate.>
+
+== References
+xref:index.adoc#component-auth[Auth Middleware in C4 model] — human-navigable
+link to the DSL element's tagged anchor.
+
+To embed the parent DSL element's spec inline (controller does this
+automatically when needed):
+
+include::index.adoc[tag=component-auth]
+
+[attempt-log]
+----
+<Regenerable from `git log` on the `:branch:`. Empty until the first
+attempt.>
+----
+------
+<1> Back-reference to the DSL element by its DSL identifier (the
+    variable name in the DSL, e.g. `api.authComp`). Used by tooling
+    that walks DSL → asset mapping in reverse. May change if the DSL
+    is refactored; the load-bearing identity is `:slug:` and `:dsl-tag:`.
+<2> The tag name marking the element in the DSL block. Stable identifier
+    for the controller's `include::index.adoc[tag=<name>]` extraction
+    (R14.14).
+
+== Implementation assets
+
+Asset `.adoc`s referenced via the `impl` key MUST carry a `[task]` block
+declaring writable scope (R14.12). This is what gives the implementation
+agent its sandbox allowlist (per `sparse-workflow.md` R4.3); without it
+the agent has no permission to write code.
+
+[source,asciidoc]
+------
+= Auth Middleware — Implementation
+:slug: notification-platform.api.auth-middleware.impl
+:dsl-element: api.authComp
+:dsl-tag: component-auth
+:phase: spec                              // becomes :phase: impl on transition
+:branch: agent/notification-platform/api/auth-middleware/impl
+:status: ◎
+:pairing: implementer-with-bdd-tests
+
+[task]
+----
+writable_globs:
+  - src/auth/**/*.ts
+  - tests/auth/**/*.test.ts
+readonly_globs:
+  - src/lib/jwt.ts
+  - auth-bdd.adoc
+  - auth-middleware.adoc
+----
+
+== Implementation plan
+<Pseudo-code, function signatures, integration points. Iterated by a
+planner agent in `:phase: spec`.>
+
+== References
+include::index.adoc[tag=component-auth]
+include::auth-bdd.adoc[]
+------
+
+When the planner accepts the implementation plan, the controller
+transitions the branch to `:phase: impl` (R14.10): a special commit
+records `Phase-Transition: true` and may carry a different
+`Pairing-Hash` (the implementer pairing replaces the planner pairing).
+The `:phase:` attribute updates; the implementer agent then runs against
+the BDD scenarios and writes code to the `writable_globs`.
+
+== Branch hierarchy
+
+The folder is flat; the C4 hierarchy is carried in Git branch names.
+Branches are slash-nested mirroring the DSL element-path (chain of
+slug properties), with a trailing segment that is either `_index` (for
+index-evolution branches) or an asset key (for asset branches).
+
+The `_index` suffix (R14.6) is mandatory: Git's loose-ref storage at
+`.git/refs/heads/` cannot have both a file and a directory at the same
+path, so a branch ref cannot be both a leaf and a prefix of another ref.
+The `_index` leaf marker keeps every branch a leaf.
+
+[%autowidth]
+|===
+| File / asset | Branch
+
+| `index.adoc` (the only canonical index branch; R14.7)
+| `agent/<project-slug>/_index`
+
+| `auth-middleware.adoc` (`detail` asset for `authComp`)
+| `agent/<project-slug>/api/auth-middleware/detail`
+
+| `auth-bdd.adoc` (`bdd` asset)
+| `agent/<project-slug>/api/auth-middleware/bdd`
+
+| `auth-impl.adoc` (`impl` asset)
+| `agent/<project-slug>/api/auth-middleware/impl`
+|===
+
+There are NO sub-branches editing `index.adoc` itself; per R14.7, all
+index evolution serialises on the single `agent/<project-slug>/_index`
+branch. This avoids the canonicality problem ("which branch's
+`index.adoc` is the source of truth?") that multi-branch index editing
+would create.
+
+Common queries:
+
+[source,bash]
+----
+# All asset workflows (any kind, any depth):
+git for-each-ref 'refs/heads/agent/notification-platform/**' \
+  --format='%(refname:short)' \
+  | grep -vE '/_index$'
+
+# Direct children of the api container's element-path
+# (shell glob '*' does NOT match '/', so this is one-level only):
+git branch -l 'agent/notification-platform/api/*'
+
+# All BDD assets across the project:
+git branch -l 'agent/notification-platform/**/bdd'
+
+# Index-evolution branch:
+git branch -l 'agent/notification-platform/_index'
+----
+
+The dotted slug form used in trailers (`Task: notification-platform.api.auth-middleware.detail`)
+is derived from the slash-nested branch by replacing `/` with `.` after
+the `agent/` prefix and dropping the `_index` suffix when present.
+
+== Phase lifecycle
+
+Each `.adoc` (index or detail) carries `:phase:` and moves through two
+states. Same Ralph loop runs in both phases; agents and evals differ.
+
+[%autowidth]
+|===
+| `:phase:` | Author | Eval style
+
+| `spec` | Human + planning agent | Mostly `rubric` and `human-in-the-loop`
+| `impl` | Autonomous agent | Mostly `command`, `metric-threshold`, `comparative`
+|===
+
+`:phase:` reflects what the agent is currently doing on the file, not
+the file's category.
+
+* `index.adoc` is always `:phase: spec` — the index encodes design,
+  not implementation.
+* `detail`, `bdd`, `tests` assets typically stay in `:phase: spec` for
+  their entire lifetime — they describe the system, they don't implement
+  it.
+* `impl` assets transition `spec → impl` once the planner agent's
+  implementation plan is accepted. The implementation agent (often a
+  different pairing) takes over.
+
+**Phase transition mechanics (R14.10).** The transition is a single
+controller-driven commit on the asset's branch. It carries:
+
+* `Phase-Transition: true` trailer
+* New `Phase: impl` trailer
+* Possibly a new `Pairing-Hash` if the pairing changes (designer →
+  implementer)
+
+The new `Pairing-Hash` does NOT trip R7.18 (pairing-hash drift halt)
+because the controller writes the transition commit itself, recording
+the deliberate handoff. Subsequent commits on the same branch are then
+pinned to the new `Pairing-Hash` per R7.17.
+
+== Constraint propagation
+
+Constraints flow from DSL to assets via two mechanisms.
+
+=== DSL fields and properties
+
+Structurizr DSL native fields propagate naturally:
+
+* `technology` on a container or component declares the implementation
+  stack (e.g. `technology "Fastify (TypeScript)"`).
+* `tags` and `properties` carry arbitrary metadata.
+
+Asset `.adoc`s inherit these from their referenced DSL element by the
+controller reading the index document at spawn time. The agent's
+environment includes resolved DSL element fields as variables.
+
+=== Tagged-region inclusion
+
+A detail `.adoc` references the spec of its parent DSL element by
+including the tagged region. R14.14 separates the two AsciiDoc mechanisms:
+
+* `xref:index.adoc#component-auth[label]` — human-navigable cross-reference
+  to a DSL element's tagged anchor (anchor is the tag name).
+* `include::index.adoc[tag=component-auth]` — content extraction; pulls
+  the DSL between `// tag::component-auth[]` and `// end::component-auth[]`
+  inline. This is what the controller (or any tooling) uses to surface
+  parent-element context to the agent at spawn time.
+
+Both depend on the same `// tag::name[]` markers in the DSL block.
+
+== Attribute → Git-trailer mapping
+
+Trailers carry the controller-spec vocabulary plus three additions for
+this format (R14.8):
+
+[%autowidth]
+|===
+| Attribute | Git trailer | Notes
+
+| `:slug:` | `Task:` | Dotted form derived from branch path (drop `_index` if present)
+| `:phase:` | `Phase:` | New trailer (R14.8)
+| `:branch:` | (implicit; the branch the trailers are on) |
+| `:status:` | derived from latest `Try-Status:` | Controller-spec vocabulary
+| `:dsl-element:` | `Dsl-Element:` | Asset `.adoc`s only; identifies source DSL element by DSL identifier
+| `:dsl-tag:` | `Dsl-Tag:` | Asset `.adoc`s only; identifies the `// tag::name[]` region
+| (none) | `Phase-Transition:` | Set to `true` on the controller commit that transitions `:phase: spec → impl` (R14.10)
+|===
+
+All other controller-spec trailers (`Pairing`, `Pairing-Hash`, `Tier`,
+`Attempt`, `Eval-Id`, etc.) apply unchanged.
+
+The `[attempt-log]` block in any `.adoc` is a projection of `git log` on
+the `:branch:`, fully regenerable per controller-spec R8.1.
+
+== Stability gradient (depth-scaled circuit-breaker defaults)
+
+Circuit-breaker thresholds default by C4 element type, not by branch
+slash-count (R14.11). This avoids fragility from slugs that contain
+slashes or unusual project-name nesting.
+
+[%autowidth]
+|===
+| C4 element type | `max_attempts_total` | `max_cost_usd` | `max_wall_clock_min`
+
+| System context (project root) | 2 | 5.00 | 30
+| Container | 3 | 3.00 | 20
+| Component | 4 | 2.00 | 15
+| Code (leaf, including assets) | 6 | 1.00 | 10
+|===
+
+The DSL parser knows each element's C4 type; the controller uses that
+to select defaults. Pairing-level `circuit_breakers` overrides take
+precedence (controller-spec R11.5).
+
+== Worked example
+
+A minimal but complete project. Three files: `index.adoc`,
+`auth-middleware.adoc` (detail asset), `auth-bdd.adoc` (BDD asset).
+
+=== `index.adoc`
+
+[source,asciidoc]
+------
+= Notification Platform
+:slug: notification-platform
+:phase: spec
+:branch: agent/notification-platform/_index
+:status: ●
+
+A platform that lets product teams configure, dispatch, and audit
+multi-channel user notifications with per-user preferences.
+
+[source,structurizr]
+----
+workspace "Notification Platform" {
+    model {
+        endUser = person "End User" {
+            properties { "slug" "end-user" }
+        }
+        engineer = person "Product Engineer" {
+            properties { "slug" "product-engineer" }
+        }
+        iam = softwareSystem "IAM" {
+            tags "External"
+            properties { "slug" "iam" }
+        }
+
+        // tag::system[]
+        platform = softwareSystem "Notification Platform" {
+            properties { "slug" "notification-platform" }
+
+            // tag::container-web[]
+            web = container "Web App" {
+                technology "React + TypeScript"
+                properties {
+                    "slug"   "web"
+                    "detail" "web-app.adoc"
+                }
+            }
+            // end::container-web[]
+
+            // tag::container-api[]
+            api = container "API Server" {
+                technology "Fastify (TypeScript)"
+                properties {
+                    "slug"   "api"
+                    "detail" "api-server.adoc"
+                }
+
+                // tag::component-auth[]
+                authComp = component "Auth Middleware" {
+                    technology "JWT verification"
+                    properties {
+                        "slug"   "auth-middleware"
+                        "detail" "auth-middleware.adoc"
+                        "bdd"    "auth-bdd.adoc"
+                    }
+                }
+                // end::component-auth[]
+            }
+            // end::container-api[]
+        }
+        // end::system[]
+
+        endUser -> web "Manages preferences via"
+        engineer -> web "Configures templates via"
+        web -> api "REST"
+        api -> iam "Verifies tokens via" "JWKS"
+    }
+
+    views {
+        systemContext platform { include * }
+        container platform { include * }
+        component api { include * }
+    }
+}
+----
+------
+
+=== `auth-middleware.adoc` (detail asset)
+
+[source,asciidoc]
+------
+= Auth Middleware — Detail
+:slug: notification-platform.api.auth-middleware.detail
+:dsl-element: api.authComp
+:dsl-tag: component-auth
+:phase: spec
+:branch: agent/notification-platform/api/auth-middleware/detail
+:status: ●
+
+== Purpose
+Validates JWTs issued by IAM, attaches the resolved identity to each
+request, rejects unauthenticated requests with 401.
+
+== Acceptance criteria
+* Token signature is verified against IAM's published JWKS.
+* `req.identity` is populated with `{userId, roles, exp}` on success.
+* Failure modes return JSON `{code, message}` with stable codes for
+  client matching.
+
+== Pseudocode
+....
+function authMiddleware(req, res, next):
+  token = extract_bearer(req.headers.authorization)
+  if !token: return reject(res, 401, "no_token")
+  identity = verify_with_iam_jwks(token)
+  if !identity: return reject(res, 401, "invalid_token")
+  if identity.exp < now() - clock_skew_grace: return reject(res, 401, "token_expired")
+  req.identity = identity
+  next()
+....
+
+== References
+xref:index.adoc#component-auth[Auth Middleware in C4 model]
+xref:auth-bdd.adoc[Auth Middleware BDD] — sibling BDD asset.
+
+[attempt-log]
+----
+(regenerated from `agent/notification-platform/api/auth-middleware/detail` trailers)
+----
+------
+
+=== `auth-bdd.adoc` (BDD asset)
+
+[source,asciidoc]
+------
+= Auth Middleware — BDD
+:slug: notification-platform.api.auth-middleware.bdd
+:dsl-element: api.authComp
+:dsl-tag: component-auth
+:phase: spec
+:branch: agent/notification-platform/api/auth-middleware/bdd
+:status: ●
+
+[source,gherkin]
+----
+Feature: Auth middleware
+
+  Scenario: Valid token
+    Given a request with a valid IAM-issued JWT
+    When the middleware processes it
+    Then req.identity is populated with {userId, roles, exp}
+    And the next handler runs
+
+  Scenario: Missing token
+    Given a request with no Authorization header
+    When the middleware processes it
+    Then the response is 401 with code "no_token"
+
+  Scenario: Expired token
+    Given a request with a JWT whose exp is more than the grace period in the past
+    When the middleware processes it
+    Then the response is 401 with code "token_expired"
+----
+
+== References
+xref:index.adoc#component-auth[Auth Middleware in C4 model]
+xref:auth-middleware.adoc[Auth Middleware Detail] — sibling spec.
+------
+
+== Out of scope (and why)
+
+[%autowidth]
+|===
+| Item | Justification
+
+| Hierarchical folder tree (per-element folders, `index.adoc` per folder) | C4 hierarchy lives in the DSL and in branch names. Folders stay flat to keep file discovery and tooling trivial.
+| Plan-level `HANDOFF.adoc` files | The controller-spec's worktree-local `HANDOFF.md` (R13.1) remains normative. This format adds no separate AsciiDoc handoff artifact in the plan folder.
+| Pruning / abandoned-attempt files | Rolled-back work lives in Git history (`↺` commits, attempt-log).
+| Pairings catalogue in the tree | Pairings live in `.claude/scaffold-pairings/` per the controller spec.
+| Custom inline macros (`branch:[]`, `commit:[]`) | Plain `xref:` plus tagged regions cover the cases that matter.
+| Multiple assets of the same standard role per DSL element (R14.13) | If you need two `bdd` files for one component, that's a signal to decompose the component. Custom keys (`"bdd-main"`, `"bdd-edge"`) handle the residual case without inventing new mechanisms.
+| Concurrent index branches | Per R14.7, all index evolution serialises on `agent/<project>/_index`. Multi-branch index editing creates an unresolved canonicality problem.
+| Cascade rollback when an upstream slug changes | Per R14.9, slug renames spawn a new branch and archive the old. Cascade reversion of dependents stays human-driven (controller-spec R12.7).
+| Orchestrator agent design (catalogue lookup, inference rules, fallback) | This format only ensures the orchestrator has enough metadata (`technology`, asset key, `:phase:`, `"skills"`); how it picks a pairing is a separate spec to be brainstormed in its own session.
+|===
+
+== AsciiDoc features used
+
+[%autowidth]
+|===
+| Feature | Use here
+
+| Document attributes | Per-file metadata (slug, phase, branch, dsl-element, dsl-tag).
+| `[source,structurizr]` blocks | Embedded canonical DSL inside `index.adoc`.
+| Tag comments inside source blocks (`// tag::name[]`) | Mark individual DSL elements for inclusion and anchor reference.
+| `include::other.adoc[tag=name]` | Controller-driven content extraction of a specific DSL element (R14.14).
+| `xref:other.adoc#anchor[label]` | Human-navigable cross-references to DSL element anchors.
+| Source blocks with language hint (`gherkin`, `pseudocode`) | Asset bodies in domain-appropriate notation.
+| `[attempt-log]` literal block | Per-asset attempt history (regenerable from Git).
+| `[task]` literal block | Implementation-asset writable scope (R14.12).
+| Admonitions (`NOTE`) | Author guidance.
+|===
+
+== Relation to `sparse-workflow.md`
+
+This spec defines the on-disk encoding only. The controller obligations
+when operating on this format are codified as **R14** in
+`sparse-workflow.md` ("C4 plan format adapter"). Everything beyond the
+on-disk encoding lives in the controller spec:
+
+* The `(agent, eval) → controller` Ralph loop
+* Eval contract and result envelope
+* Eval type catalogue
+* Pairing definitions and judge-model separation
+* Sandbox isolation and trust model
+* Crash recovery and circuit breakers
+* `upstream-constraint` failure semantics
+* Trailer vocabulary (this format adds `Phase`, `Dsl-Element`, `Dsl-Tag`,
+  `Phase-Transition` per R14.8 / R14.10)
+
+When the controller does anything beyond reading and writing `.adoc`
+files in this format, the controller spec is normative.

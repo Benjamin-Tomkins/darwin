@@ -190,7 +190,7 @@ coordination, non-git VCS support, multi-repo / submodule support.
 ## Project Initialisation
 
 ```
-                  /scaffold-init  (one-time per project)
+          /scaffold-init  (one-time per project)
                           │
                           ▼
               ┌─────────────────────────┐
@@ -1716,6 +1716,28 @@ This prevents:
 | R13.2 | HANDOFF includes the trigger reason: circuit-breaker name, exhaustion of escalation ladder, `needs-human` from an eval, or `upstream-constraint` with the upstream slug | Must |
 | R13.3 | After HANDOFF generation, parent stops spawning further attempts on the task until the operator invokes `/scaffold-worktree --resume <slug>` | Must |
 | R13.4 | HANDOFF is not committed to the agent branch; it lives in the worktree alongside artifacts and is regenerated on each block event | Must |
+
+### R14 — C4 plan format adapter
+
+The controller can drive plans encoded in the C4 plan format (see `docs/superpowers/specs/2026-05-03-c4-plan-format.adoc`): a single `index.adoc` containing an embedded Structurizr DSL block plus flat sibling `.adoc` files referenced from DSL element `properties`. R14 codifies the controller's obligations when operating on this format.
+
+| | Requirement | Priority |
+|---|---|---|
+| R14.1 | `/scaffold-worktree --c4 <plan-dir>` accepts a directory containing `index.adoc`; controller treats the embedded `[source,structurizr]` block as the canonical plan source | Must |
+| R14.2 | Controller parses the Structurizr DSL block out of `index.adoc`; extracts elements, `properties`, `technology`, `tags`, and the inline `// tag::name[]` regions that mark each workflow-spawning element | Must |
+| R14.3 | Every workflow-spawning DSL element MUST declare an immutable `"slug"` property (kebab-case, unique within the parent's children); controller validates uniqueness at parse time and refuses to scaffold on collision | Must |
+| R14.4 | Asset-reference property keys whose value ends in `.adoc` spawn an asset workflow on commit. Standard keys recognised by the controller: `detail`, `bdd`, `tests`, `impl`. Custom keys are permitted and treated identically | Must |
+| R14.5 | Branch convention is slash-nested: `agent/<project-slug>/<element-path>/<asset-key|_index>`. `<element-path>` is the dot-to-slash translation of the chain of `"slug"` properties walking from the element to the project root | Must |
+| R14.6 | Index-evolution branches end in `/_index` to avoid Git ref-namespace collision with descendant branches; never create a branch that is both a leaf and a prefix of another branch | Must |
+| R14.7 | Exactly one canonical index branch per project: `agent/<project-slug>/_index`. All `index.adoc` evolution serialises on this branch; concurrent index editing is forbidden. Sub-branches edit asset `.adoc` files only | Must |
+| R14.8 | Controller emits the following trailers on commits where applicable: `Phase` (`spec` or `impl`), `Dsl-Element` (DSL identifier of the source element on asset commits), `Dsl-Tag` (DSL tagged-region name on asset commits) | Must |
+| R14.9 | Property lifecycle on `index.adoc` commits: (a) added asset-reference property → spawn workflow on the asset branch; (b) removed property whose asset branch has no `●` → mark deferred (`⊘`); (c) removed property whose asset branch has a `●` → emit `failure_class: upstream-constraint` and HANDOFF naming the asset; (d) renamed property value where source and target slug match → treat as filename change only; (e) renamed where slug differs → spawn new asset workflow and archive the old branch | Must |
+| R14.10 | Phase transition (`:phase: spec → impl`) is a first-class controller operation. The transition commit may carry a different `Pairing-Hash` than the prior commit on the branch without tripping R7.18, provided the commit also carries `Phase-Transition: true` and the new pairing is loaded from the catalogue at transition time | Must |
+| R14.11 | Depth-scaled circuit-breaker defaults are indexed by C4 element type, not branch slash-count: system-context = 2 attempts / $5.00 / 30 min; container = 3 / $3.00 / 20 min; component = 4 / $2.00 / 15 min; code = 6 / $1.00 / 10 min. Pairing-level overrides take precedence | Must |
+| R14.12 | Implementation-asset (`impl`-keyed) `.adoc` files MUST carry a `[task]` block declaring `writable_globs` and `readonly_globs`; controller injects these into the agent's sandbox allowlist (per R4.3) when spawning the implementation agent | Must |
+| R14.13 | A single DSL element MUST NOT carry two properties with the same standard asset key (no two `bdd` properties on one element). If multiple assets of the same role are needed, decompose the element or use distinct custom keys | Must |
+| R14.14 | Tagged-region extraction uses AsciiDoc `include::index.adoc[tag=<name>]`; cross-references for human navigation use `xref:index.adoc#<anchor>[label]`. The two are distinct mechanisms; controller uses `:dsl-tag:` attribute to locate the tagged region for extraction | Must |
+| R14.15 | `:pairing:` on `index.adoc` governs only the index-evolution workflow itself; asset `.adoc` files have independent pairings (statically assigned via their own `:pairing:` or dynamically inferred by the orchestrator agent when omitted) | Must |
 
 ---
 

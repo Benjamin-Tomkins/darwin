@@ -14,3 +14,6 @@
 !.claude/plugins/
 !.claude/plugins/darwin/
 !.claude/plugins/darwin/**
+
+# Exclude node_modules inside the plugin helpers
+.claude/plugins/darwin/helpers/c4/node_modules/

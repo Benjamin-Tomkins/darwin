@@ -1,0 +1,28 @@
+= Hello World Plan
+
+:phase: spec
+
+[source,structurizr]
+----
+workspace "hello-world" {
+  model {
+    softwareSystem "Greeter" "A simple greeting service" {
+      properties {
+        slug greeter
+        impl greeter-impl.adoc
+        tests greeter-tests.adoc
+      }
+      container "API" "The HTTP API layer" {
+        properties {
+          slug api
+          impl api-impl.adoc
+        }
+      }
+    }
+  }
+}
+----
+
+== Overview
+
+A minimal plan for smoke-testing the Darwin Ralph loop controller.

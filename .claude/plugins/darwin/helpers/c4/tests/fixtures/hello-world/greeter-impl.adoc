@@ -1,0 +1,15 @@
+= Greeter Implementation
+
+:phase: spec
+
+[task]
+pairing: hello-world
+writable_globs:
+  - src/**
+
+[task-state]
+status: ◌
+
+== Implementation
+
+Create `src/greeter.js` exporting a function `greet(name)` that returns the string `Hello, <name>!`.

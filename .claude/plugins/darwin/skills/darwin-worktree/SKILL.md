@@ -37,12 +37,22 @@ For each `pairing.yaml` found:
 ```
 /darwin-worktree <plan.adoc> [--base <ref>] [--resume <slug>]
 /darwin-worktree --c4 <plan-dir> [--base <ref>] [--resume <slug>]
+/darwin-worktree --resume <slug>
 ```
 
 - `<plan.adoc>` — path to an AsciiDoc plan file, or a directory containing `index.adoc`.
 - `--base <ref>` — base git ref for new agent branches. Defaults to `HEAD`.
 - `--resume <slug>` — re-enter the loop for a specific task slug (after a HANDOFF or context-limit stop).
 - `--c4 <plan-dir>` — parse the plan in C4 format (embedded Structurizr DSL in `index.adoc`).
+
+**If no plan argument is provided**, auto-discover before asking the user:
+```bash
+find . -name "index.adoc" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null
+find docs -name "*.adoc" 2>/dev/null | grep -v index.adoc
+```
+- Exactly one result → use it (announce which file was selected).
+- Multiple results → list them and ask the user to specify.
+- No results → print usage above and stop. Do not ask an open-ended question.
 
 ---
 

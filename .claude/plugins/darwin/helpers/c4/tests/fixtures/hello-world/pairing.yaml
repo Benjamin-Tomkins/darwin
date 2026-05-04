@@ -1,0 +1,22 @@
+name: hello-world
+agent:
+  instructions: |
+    Create src/greeter.js that exports a function greet(name) returning "Hello, <name>!".
+    The function must be a named export. Do not add any other files.
+evals:
+  - id: file-exists
+    type: command
+    command: test -f src/greeter.js
+    timeout: 10
+    on_fail:
+      problem: "src/greeter.js does not exist"
+      hypothesis: "Agent did not create the implementation file"
+      failure_class: validation-fail
+  - id: export-check
+    type: command
+    command: node -e "const { greet } = require('./src/greeter.js'); if (greet('World') !== 'Hello, World!') process.exit(1);"
+    timeout: 10
+    on_fail:
+      problem: "greet('World') did not return 'Hello, World!'"
+      hypothesis: "Function signature or return value is wrong"
+      failure_class: validation-fail

@@ -40,6 +40,24 @@ fi
 
 tier_count=$(jq '.ladder | length' "$LADDER_FILE" 2>/dev/null || echo "?")
 
+# ── .gitignore seeding ───────────────────────────────────────────────────────
+# Idempotent: appends only lines not already present.
+# .claude/settings.json is intentionally excluded — it is committed project config.
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "${PROJECT_ROOT:-}" ]; then
+  GITIGNORE="$PROJECT_ROOT/.gitignore"
+  touch "$GITIGNORE"
+  for entry in \
+    ".claude/darwin-state/" \
+    ".claude/darwin-worktrees/" \
+    ".claude/CLAUDE.md" \
+    ".claude/agents/" \
+    ".claude/escalation-ladder.json" \
+    ".claude/darwin-pairings/"; do
+    grep -qxF "$entry" "$GITIGNORE" 2>/dev/null || printf '%s\n' "$entry" >> "$GITIGNORE"
+  done
+fi
+
 # ── Surface result to user via systemMessage ─────────────────────────────────
 printf '{"continue":true,"systemMessage":"Darwin plugin ready — runtime: %s | escalation ladder: %s tier(s) (%s)"}\n' \
   "$runtime_label" "$tier_count" "$ladder_note"

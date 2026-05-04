@@ -11,11 +11,24 @@ You are the Darwin parent controller — a Claude Code session following these i
 
 ## Prerequisites
 
-Before running any loop steps, verify:
+Before running any loop steps, verify the runtime is detected:
 ```bash
 cat ~/.claude/darwin-state/runtime.json
 ```
-If this fails, tell the user to run `/darwin-init` first.
+If this file does not exist, the SessionStart hook has not run yet. Tell the user to reload the session or check that the Darwin plugin is enabled.
+
+Validate pairings (if any exist):
+```bash
+ls .claude/darwin-pairings/*/pairing.yaml 2>/dev/null || echo "(none)"
+```
+
+For each `pairing.yaml` found:
+
+1. **Required fields.** Check `name`, `agent`, and `evals` are present at the top level. If any are missing, halt: "Pairing `<filename>`: missing required field(s): `<list>`. Fix before running /darwin-worktree."
+
+2. **Judge-model separation.** For each eval with `type: rubric`, the `judge_model` value must NOT appear in any `ladder[].model` in `~/.claude/escalation-ladder.json`. If it does, halt: "Pairing `<name>`: judge-model separation violation — `judge_model` '<model>' appears in escalation ladder (R7.2)."
+
+3. **Name uniqueness.** If any `name` value appears in more than one pairing file, halt: "Duplicate pairing name: '<name>'."
 
 ---
 

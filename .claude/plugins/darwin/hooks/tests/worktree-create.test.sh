@@ -101,4 +101,56 @@ fi
 allow_write=$(jq -r '.sandbox.filesystem.allowWrite[0]' "$WORKTREE_PATH/.claude/settings.json")
 [ "$allow_write" = "src/main.ts" ] || fail "sandbox allowWrite not populated from writable_globs; got: $allow_write"
 
+# ── Scenario 2: template already has settings.json → merge path ───────────────
+# Use a distinct repo-hash/slug so there's no collision with scenario 1.
+REPO_HASH2="testhash02"
+TASK_SLUG2="auth-merge"
+WORKTREE_PATH2="$WORKTREE_BASE/$REPO_HASH2/$TASK_SLUG2"
+
+cleanup2() {
+  if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
+    git -C "$PROJECT_DIR" worktree remove --force "$WORKTREE_PATH2" 2>/dev/null || true
+  fi
+  rm -rf "$SIGNAL_BASE/$REPO_HASH2" "$WORKTREE_BASE/$REPO_HASH2"
+}
+trap 'cleanup; cleanup2' EXIT
+
+TEMPLATE_DIR2=$(mktemp -d /tmp/darwin-test-template2-XXXXX)
+# Pre-populate settings.json in the template with extra keys that must survive the merge.
+cat > "$TEMPLATE_DIR2/settings.json" <<'SETTINGS'
+{
+  "someKey": "value",
+  "sandbox": {
+    "enabled": false
+  }
+}
+SETTINGS
+
+MANIFEST_PATH2="$SIGNAL_BASE/$REPO_HASH2/$TASK_SLUG2/manifest.json"
+mkdir -p "$SIGNAL_BASE/$REPO_HASH2/$TASK_SLUG2"
+cat > "$MANIFEST_PATH2" <<EOF
+{
+  "project_root":       "$PROJECT_DIR",
+  "base_ref":           "HEAD",
+  "branch":             "agent/auth-merge",
+  "pairing_name":       "implementer-with-tests",
+  "writable_globs":     ["src/main.ts"],
+  "readonly_globs":     [],
+  "agent_template_path": "$TEMPLATE_DIR2"
+}
+EOF
+
+RESULT2=$(printf '{"path":"%s"}' "$WORKTREE_PATH2" | bash "$HOOK")
+
+[ "$RESULT2" = "$WORKTREE_PATH2" ] || fail "scenario 2: hook did not return worktree path; got: $RESULT2"
+[ -f "$WORKTREE_PATH2/.claude/settings.json" ] || fail "scenario 2: settings.json not present"
+
+allow_write2=$(jq -r '.sandbox.filesystem.allowWrite[0]' "$WORKTREE_PATH2/.claude/settings.json")
+[ "$allow_write2" = "src/main.ts" ] || fail "scenario 2: allowWrite not patched from writable_globs; got: $allow_write2"
+
+some_key2=$(jq -r '.someKey' "$WORKTREE_PATH2/.claude/settings.json")
+[ "$some_key2" = "value" ] || fail "scenario 2: someKey not preserved after merge; got: $some_key2"
+
+rm -rf "$TEMPLATE_DIR2"
+
 echo "PASS: worktree-create.sh"

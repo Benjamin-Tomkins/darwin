@@ -60,10 +60,12 @@ fi
 WRITABLE=$(jq '.writable_globs // []' "$MANIFEST_PATH")
 if [ -f "$WORKTREE_PATH/.claude/settings.json" ]; then
   # Merge: patch just allowWrite into the existing template config
+  TMPFILE=$(mktemp)
+  trap 'rm -f "$TMPFILE"' EXIT
   jq --argjson w "$WRITABLE" \
     '.sandbox.filesystem.allowWrite = $w' \
-    "$WORKTREE_PATH/.claude/settings.json" > /tmp/darwin-settings-tmp.json
-  mv /tmp/darwin-settings-tmp.json "$WORKTREE_PATH/.claude/settings.json"
+    "$WORKTREE_PATH/.claude/settings.json" > "$TMPFILE"
+  mv "$TMPFILE" "$WORKTREE_PATH/.claude/settings.json"
 else
   # No template — emit minimal sandbox config
   jq -n --argjson w "$WRITABLE" '{

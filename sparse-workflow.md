@@ -270,7 +270,8 @@ Failures are reported with line numbers; init refuses to complete with bad pairi
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                       PARENT CONTROLLER                              │
-│      (long-lived: Claude Agent SDK loop or orchestrating session)    │
+│      (skill-driven agentic Claude Code session; follows             │
+│       scaffold-worktree.md; loop runs autonomously via Git trailers) │
 │                                                                      │
 │  THIS IS THE STATE MACHINE. Hooks are signals.                       │
 │                                                                      │
@@ -1400,20 +1401,22 @@ Worktrees live outside the project repo to avoid nested-worktree confusion:
 ```
 ~/.claude/scaffold-worktrees/<repo-hash>/<task-slug>/
 ├── .clauderules                  # readonly file/range sentinels
-├── .gitignore                    # includes .tmp/
-├── .tmp/                         # ephemeral scratch (CLAUDE_CODE_TMPDIR)
+├── .gitignore                    # inherited from project (seeded by /scaffold-init)
 ├── HANDOFF.md                    # generated on ⊖ only
 ├── <writable artifacts>          # per pairing's scope.writable_globs
 ├── <readonly context>            # per pairing's scope.readonly_globs
 └── .claude/
-    ├── CLAUDE.md                 # task brief + symbol vocab; pairing-specific
-    ├── settings.json             # sandbox + permission rules
-    └── agents/task-agent.md      # implementer; model: = current tier
+    ├── CLAUDE.md                 # task brief + symbol vocab; injected per-task from pairing template
+    ├── settings.json             # sandbox + permission rules; injected per-task
+    └── agents/task-agent.md      # implementer; model: = current tier; injected per-task
 ```
 
-The CLAUDE.md and agent definition are generated from the **pairing's agent
-template**, so a c4-designer worktree has different injected content than an
-implementer worktree.
+The `.claude/` contents are generated from the **pairing's agent template**
+and injected by `WorktreeCreate`; a c4-designer worktree has different
+injected content than an implementer worktree. Because these files are
+already tracked by the project (added to `.gitignore` by `/scaffold-init`),
+`WorktreeCreate` runs `git update-index --skip-worktree` on each injected
+file so the agent's local modifications do not propagate to other branches.
 
 ---
 
@@ -1421,10 +1424,9 @@ implementer worktree.
 
 | Hook | Owner | Purpose |
 |------|-------|---------|
-| `WorktreeCreate` | parent | Replaces git default. Hook owns sparse checkout, validation closure, chmod, `.tmp/`, `.claude/` injection (using pairing-specific templates). Returns absolute path on stdout. |
+| `WorktreeCreate` | parent | Replaces git default (`.worktreeinclude` is NOT processed when this hook is registered — hook processes it manually). Hook: creates worktree, applies sparse checkout from `pairing.scope.readonly_globs + writable_globs`, runs validation closure, injects `.claude/` (settings, agent definition, CLAUDE.md) from pairing-specific templates, runs `git update-index --skip-worktree` on each injected file so agent edits stay local. Returns absolute worktree path on stdout. |
 | `PreToolUse:Edit`/`PreToolUse:Write` | agent | Enforces writable allowlist + protected tag regions. Allowlist comes from pairing's `scope.writable_globs`. |
-| `SubagentStop` | parent (signal) | Captures `agent_id`, `agent_transcript_path`, `last_assistant_message`. Notifies controller. Does not decide. |
-| `Stop` (in agent) | agent | Wipes `.tmp/` on session end. |
+| `SubagentStop` | parent (signal) | Receives `session_id`, `cwd`, `transcript_path`, `agent_id` on stdin JSON. Writes signal to `~/.claude/scaffold-state/<session_id>/signal.json` (outside worktree). Uses `cwd` from stdin to identify the worktree. Does not decide outcome — controller reads signal and drives the loop. |
 
 ---
 
@@ -1476,7 +1478,8 @@ Pairings parameterise the file lists; the shape is fixed:
     "allowUnsandboxedCommands": false,
     "failIfUnavailable": true,
     "filesystem": {
-      "allowWrite": ["<from pairing.scope.writable_globs, expanded>", "./.tmp/"],
+      "allowWrite": ["<from pairing.scope.writable_globs, expanded as explicit paths>"],
+      "denyWrite": ["."],
       "denyRead": ["./.git/**", "../**/.git/**", "~/.ssh", "~/.aws",
                    "./.env*", "./secrets/**"]
     }
@@ -1594,7 +1597,7 @@ This prevents:
 | R4.3 | Sandbox `allowWrite` lists explicit paths from pairing; never directory wildcards | Must |
 | R4.4 | `allowUnsandboxedCommands: false`; `failIfUnavailable: true` | Must |
 | R4.5 | Permission deny list includes `Read(./.git/**)`, `Read(../**/.git/**)`, project-defined readonly paths | Must |
-| R4.6 | `chmod 444` on dependency files as defense-in-depth, not primary boundary | Should |
+| R4.6 | Sandbox OS-level enforcement (Seatbelt on macOS, bubblewrap on Linux) is the primary write boundary for all subprocesses; `permissions.deny/allow` covers native Edit/Write/Read tools. Both must be present. `chmod` on dependency files is NOT required and is redundant given sandbox enforcement. | Must |
 | R4.7 | Parent verifies resolved permission set after settings merge before each spawn | Must |
 | R4.8 | Agent receives no information about its tier, model, attempt number, or which evals will judge it | Must |
 
@@ -1665,8 +1668,8 @@ This prevents:
 | | Requirement | Priority |
 |---|---|---|
 | R9.1 | Agent worktree sandbox is enabled with `allowUnsandboxedCommands: false` and `failIfUnavailable: true` (no silent fallback to unsandboxed execution) | Must |
-| R9.2 | `.tmp/` inside the worktree is the only writable scratch directory; agents redirect transient state there via `CLAUDE_CODE_TMPDIR` | Must |
-| R9.3 | `.tmp/` is gitignored and wiped by the agent's `Stop` hook on session end | Must |
+| R9.2 | Agent worktree scratch is limited to the paths declared in `sandbox.filesystem.allowWrite`; no additional scratch directory is provided. (`CLAUDE_CODE_TMPDIR` is not used — it does not apply to subagents spawned via the Agent tool.) | Must |
+| R9.3 | Controller signal state (`SubagentStop` output) is written to `~/.claude/scaffold-state/<session_id>/signal.json`, outside the worktree, so it survives worktree cleanup and is never staged. | Must |
 | R9.4 | Eval sandbox is a separate environment from the agent worktree (R5.6); the two never share filesystem state | Must |
 
 ### R10 — Skill interface
@@ -1747,7 +1750,7 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
 |---|---|
 | Git version | 2.32+ (`git interpret-trailers --parse`) |
 | Sandbox availability | bubblewrap on Linux/WSL2, Seatbelt on macOS; Windows not supported |
-| Hook timing | Sparse checkout, chmod, `.claude/` injection in `WorktreeCreate` only |
+| Hook timing | Sparse checkout, `.worktreeinclude` processing, `.claude/` injection, `git update-index --skip-worktree` in `WorktreeCreate` only |
 | Hook scope | `WorktreeCreate` REPLACES Claude Code's git default |
 | Loop ownership | Parent controller; `SubagentStop` is a signal hook only |
 | Subagent freshness | Each retry must be a NEW subagent invocation; resumption forbidden |
@@ -1811,8 +1814,14 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
 9. **Validation sandbox implementation** — Container, overlay filesystem,
    or fresh worktree clone? Each has different overhead/isolation tradeoffs.
 
-10. **Parent controller deployment** — Long-lived Claude Agent SDK process,
-    orchestrating Claude Code session, or external script?
+10. ~~**Parent controller deployment** — Long-lived Claude Agent SDK process,
+    orchestrating Claude Code session, or external script?~~ *Resolved:
+    Claude Code IS the controller — an agentic session following the
+    `scaffold-worktree.md` skill in the sparse-workflow plugin. The loop runs
+    autonomously within a single Claude Code session; state persistence is via
+    Git trailers. Plugin structure: skills (markdown), WorktreeCreate +
+    SubagentStop hooks (shell scripts), TypeScript helpers for precision
+    operations (DSL parsing, branch naming, trailer formatting).*
 
 11. **Merge strategy default** — Squash-merge for clean main, with the audit
     branch archived under `refs/archive/`?

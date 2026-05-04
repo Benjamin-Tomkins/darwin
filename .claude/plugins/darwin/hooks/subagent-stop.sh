@@ -32,17 +32,17 @@ AGENT_THINKING=0
 
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
   # Use reduce + inputs rather than -s to avoid slurping the entire transcript into memory.
-  TOTALS=$(jq -n 'reduce inputs as $line (
-    {input: 0, output: 0, thinking: 0};
-    if ($line | has("usage")) then
-      .input    += ($line.usage.input_tokens    // 0 | floor) |
-      .output   += ($line.usage.output_tokens   // 0 | floor) |
-      .thinking += ($line.usage.thinking_tokens // 0 | floor)
-    else . end
-  )' "$TRANSCRIPT_PATH")
-  AGENT_INPUT=$(printf '%s' "$TOTALS" | jq '.input')
-  AGENT_OUTPUT=$(printf '%s' "$TOTALS" | jq '.output')
-  AGENT_THINKING=$(printf '%s' "$TOTALS" | jq '.thinking')
+  # Emit the three totals as a single tab-separated line so we parse once.
+  read -r AGENT_INPUT AGENT_OUTPUT AGENT_THINKING < <(jq -nr '
+    reduce inputs as $line (
+      {input: 0, output: 0, thinking: 0};
+      if ($line | has("usage")) then
+        .input    += ($line.usage.input_tokens    // 0 | floor) |
+        .output   += ($line.usage.output_tokens   // 0 | floor) |
+        .thinking += ($line.usage.thinking_tokens // 0 | floor)
+      else . end
+    ) | [.input, .output, .thinking] | @tsv
+  ' "$TRANSCRIPT_PATH")
 fi
 
 # Write signal.json — controller reads this after SubagentStop fires.

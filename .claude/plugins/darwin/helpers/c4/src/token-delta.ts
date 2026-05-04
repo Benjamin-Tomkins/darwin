@@ -20,14 +20,21 @@ export function computeDelta(before: TokenSnapshot, after: TokenSnapshot): Token
   };
 }
 
-// CLI entry point: reads JSON array [before, after] from stdin, writes delta to stdout
+// ── CLI entry point ────────────────────────────────────────────────────────
+// Reads JSON array [before, after] from stdin, writes delta JSON to stdout.
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const chunks: Buffer[] = [];
   process.stdin.on('data', (c: Buffer) => chunks.push(c));
   process.stdin.on('end', () => {
-    const [before, after] = JSON.parse(
-      Buffer.concat(chunks).toString('utf8')
-    ) as [TokenSnapshot, TokenSnapshot];
-    process.stdout.write(JSON.stringify(computeDelta(before, after)) + '\n');
+    try {
+      const [before, after] = JSON.parse(
+        Buffer.concat(chunks).toString('utf8')
+      ) as [TokenSnapshot, TokenSnapshot];
+      process.stdout.write(JSON.stringify(computeDelta(before, after)) + '\n');
+    } catch (err) {
+      process.stderr.write(`token-delta: ${(err as Error).message}\n`);
+      process.exit(1);
+    }
   });
 }

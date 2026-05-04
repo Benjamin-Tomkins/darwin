@@ -44,7 +44,7 @@ tier_count=$(jq '.ladder | length' "$LADDER_FILE" 2>/dev/null || echo "?")
 # Idempotent: appends only lines not already present.
 # .claude/settings.json is intentionally excluded — it is committed project config.
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-if [ -n "${PROJECT_ROOT:-}" ]; then
+if [ -n "$PROJECT_ROOT" ]; then
   GITIGNORE="$PROJECT_ROOT/.gitignore"
   touch "$GITIGNORE"
   for entry in \

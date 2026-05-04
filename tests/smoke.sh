@@ -138,13 +138,11 @@ check_branch "three-level chain"    "agent/a/b/c/tests"              '["a","b","
 
 echo ""
 echo "--- 5. vitest unit tests"
-cd "$HELPERS"
 if (cd "$HELPERS" && npm test 2>&1 >/dev/null); then
   ok "all vitest tests passed"
 else
   fail "vitest tests failed — run 'npm test' in .claude/plugins/darwin/helpers/c4 for details"
 fi
-cd "$REPO_ROOT"
 
 # ── Summary ───────────────────────────────────────────────────────────────
 

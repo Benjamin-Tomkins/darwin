@@ -91,6 +91,12 @@ class Parser {
 
   skipNl(): void { while (this.peek().type === 'NL') this.next(); }
 
+  /** True if the current token ends the enclosing block (closing brace or input end). */
+  atBlockEnd(): boolean {
+    const t = this.peek().type;
+    return t === 'RBRACE' || t === 'EOF';
+  }
+
   expect(type: TokType, value?: string): Tok {
     const t = this.next();
     if (t.type !== type || (value !== undefined && t.value !== value)) {
@@ -101,12 +107,12 @@ class Parser {
     return t;
   }
 
-  // Skip until end-of-line (without consuming the NL).
+  /** Skip until end-of-line (without consuming the NL). */
   skipToEol(): void {
     while (this.peek().type !== 'NL' && this.peek().type !== 'EOF') this.next();
   }
 
-  // Skip a brace-delimited block, including the opening brace.
+  /** Skip a brace-delimited block, including the opening brace. */
   skipBraceBlock(): void {
     this.expect('LBRACE');
     let depth = 1;
@@ -117,7 +123,7 @@ class Parser {
     }
   }
 
-  // Skip an unknown statement or block at current position.
+  /** Skip an unknown statement or block at current position. */
   skipStatement(): void {
     while (this.peek().type !== 'NL' && this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
       if (this.peek().type === 'LBRACE') { this.skipBraceBlock(); return; }
@@ -135,9 +141,9 @@ class Parser {
 
     let elements: DarwinElement[] = [];
 
-    while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+    while (!this.atBlockEnd()) {
       this.skipNl();
-      if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF') break;
+      if (this.atBlockEnd()) break;
       const tok = this.peek();
       if (tok.type === 'WORD' && tok.value === 'model') {
         elements = this.parseModel();
@@ -160,9 +166,9 @@ class Parser {
 
   parseElementList(): DarwinElement[] {
     const elems: DarwinElement[] = [];
-    while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+    while (!this.atBlockEnd()) {
       this.skipNl();
-      if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF') break;
+      if (this.atBlockEnd()) break;
       const tok = this.peek();
       if (tok.type === 'WORD' && ELEMENT_KEYWORDS.has(tok.value)) {
         elems.push(this.parseElement());
@@ -188,20 +194,19 @@ class Parser {
     while (
       this.peek().type !== 'LBRACE' &&
       this.peek().type !== 'NL' &&
-      this.peek().type !== 'RBRACE' &&
-      this.peek().type !== 'EOF'
+      !this.atBlockEnd()
     ) this.next();
 
-    let properties: Record<string, string> = {};
+    const properties: Record<string, string> = {};
     let slug = '';
-    let children: DarwinElement[] = [];
+    const children: DarwinElement[] = [];
 
     if (this.peek().type === 'LBRACE') {
       this.expect('LBRACE');
 
-      while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+      while (!this.atBlockEnd()) {
         this.skipNl();
-        if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF') break;
+        if (this.atBlockEnd()) break;
         const tok = this.peek();
 
         if (tok.type === 'WORD' && tok.value === 'properties') {
@@ -230,9 +235,9 @@ class Parser {
     this.expect('LBRACE');
     const props: Record<string, string> = {};
 
-    while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+    while (!this.atBlockEnd()) {
       this.skipNl();
-      if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF') break;
+      if (this.atBlockEnd()) break;
 
       const keyTok = this.peek();
       if (keyTok.type === 'WORD' || keyTok.type === 'STRING') {

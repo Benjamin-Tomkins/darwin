@@ -89,6 +89,11 @@ class Parser {
     next() { return this.toks[this.pos++]; }
     skipNl() { while (this.peek().type === 'NL')
         this.next(); }
+    /** True if the current token ends the enclosing block (closing brace or input end). */
+    atBlockEnd() {
+        const t = this.peek().type;
+        return t === 'RBRACE' || t === 'EOF';
+    }
     expect(type, value) {
         const t = this.next();
         if (t.type !== type || (value !== undefined && t.value !== value)) {
@@ -96,12 +101,12 @@ class Parser {
         }
         return t;
     }
-    // Skip until end-of-line (without consuming the NL).
+    /** Skip until end-of-line (without consuming the NL). */
     skipToEol() {
         while (this.peek().type !== 'NL' && this.peek().type !== 'EOF')
             this.next();
     }
-    // Skip a brace-delimited block, including the opening brace.
+    /** Skip a brace-delimited block, including the opening brace. */
     skipBraceBlock() {
         this.expect('LBRACE');
         let depth = 1;
@@ -113,7 +118,7 @@ class Parser {
                 depth--;
         }
     }
-    // Skip an unknown statement or block at current position.
+    /** Skip an unknown statement or block at current position. */
     skipStatement() {
         while (this.peek().type !== 'NL' && this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
             if (this.peek().type === 'LBRACE') {
@@ -131,9 +136,9 @@ class Parser {
         this.skipNl();
         this.expect('LBRACE');
         let elements = [];
-        while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+        while (!this.atBlockEnd()) {
             this.skipNl();
-            if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF')
+            if (this.atBlockEnd())
                 break;
             const tok = this.peek();
             if (tok.type === 'WORD' && tok.value === 'model') {
@@ -155,9 +160,9 @@ class Parser {
     }
     parseElementList() {
         const elems = [];
-        while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+        while (!this.atBlockEnd()) {
             this.skipNl();
-            if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF')
+            if (this.atBlockEnd())
                 break;
             const tok = this.peek();
             if (tok.type === 'WORD' && ELEMENT_KEYWORDS.has(tok.value)) {
@@ -181,17 +186,16 @@ class Parser {
         // Skip any remaining tokens on this line before the block
         while (this.peek().type !== 'LBRACE' &&
             this.peek().type !== 'NL' &&
-            this.peek().type !== 'RBRACE' &&
-            this.peek().type !== 'EOF')
+            !this.atBlockEnd())
             this.next();
-        let properties = {};
+        const properties = {};
         let slug = '';
-        let children = [];
+        const children = [];
         if (this.peek().type === 'LBRACE') {
             this.expect('LBRACE');
-            while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+            while (!this.atBlockEnd()) {
                 this.skipNl();
-                if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF')
+                if (this.atBlockEnd())
                     break;
                 const tok = this.peek();
                 if (tok.type === 'WORD' && tok.value === 'properties') {
@@ -223,9 +227,9 @@ class Parser {
         this.skipNl();
         this.expect('LBRACE');
         const props = {};
-        while (this.peek().type !== 'RBRACE' && this.peek().type !== 'EOF') {
+        while (!this.atBlockEnd()) {
             this.skipNl();
-            if (this.peek().type === 'RBRACE' || this.peek().type === 'EOF')
+            if (this.atBlockEnd())
                 break;
             const keyTok = this.peek();
             if (keyTok.type === 'WORD' || keyTok.type === 'STRING') {

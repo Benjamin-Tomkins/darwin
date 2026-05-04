@@ -7,8 +7,8 @@ DARWIN_STATE_DIR="${DARWIN_STATE_DIR:-$HOME/.claude/darwin-state}"
 mkdir -p "$DARWIN_STATE_DIR"
 RUNTIME_JSON="$DARWIN_STATE_DIR/runtime.json"
 
+# write_runtime <name> <exec> <pm> <run_flags_json_array>
 write_runtime() {
-  # $4 is a JSON array literal, e.g. '["run"]' or '[]'
   printf '{"runtime":"%s","exec":"%s","pm":"%s","run_flags":%s}\n' \
     "$1" "$2" "$3" "$4" > "$RUNTIME_JSON"
 }
@@ -19,16 +19,15 @@ if command -v bun >/dev/null 2>&1; then
   exit 0
 fi
 
-# Node.js — requires v20+: invoked as `node file.js` (no extra flags)
+# Node.js — requires v20+: invoked as `node file.js` (no extra flags).
+# The trailing `2>/dev/null` on the numeric comparison suppresses the
+# "integer expression expected" error if `major` somehow ends up non-numeric.
 if command -v node >/dev/null 2>&1; then
   major=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1)
   if [ "${major:-0}" -ge 20 ] 2>/dev/null; then
-    if command -v pnpm >/dev/null 2>&1; then
-      pm="pnpm"
-    elif command -v yarn >/dev/null 2>&1; then
-      pm="yarn"
-    else
-      pm="npm"
+    if   command -v pnpm >/dev/null 2>&1; then pm="pnpm"
+    elif command -v yarn >/dev/null 2>&1; then pm="yarn"
+    else                                       pm="npm"
     fi
     write_runtime "node" "node" "$pm" '[]'
     exit 0

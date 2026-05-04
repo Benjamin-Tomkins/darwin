@@ -41,14 +41,16 @@ fi
 
 AGENT_TEMPLATE_PATH=$(jq -r '.agent_template_path // empty' "$MANIFEST_PATH")
 
-# Create worktree with a new branch, no checkout yet
+# Create worktree with a new branch, no checkout yet.
+# If anything below fails, _cleanup_worktree removes the half-built worktree.
 mkdir -p "$(dirname "$WORKTREE_PATH")"
 git -C "$PROJECT_ROOT" worktree add --no-checkout -b "$BRANCH" "$WORKTREE_PATH" "$BASE_REF"
-_WORKTREE_CLEANUP=1
+WORKTREE_NEEDS_CLEANUP=1
+TMPFILE=""
 _cleanup_worktree() {
-  [[ "${_WORKTREE_CLEANUP:-}" = "1" ]] || return 0
+  [ "${WORKTREE_NEEDS_CLEANUP:-0}" = "1" ] || return 0
   git -C "$PROJECT_ROOT" worktree remove --force "$WORKTREE_PATH" 2>/dev/null || true
-  rm -f "${TMPFILE:-}"
+  [ -n "$TMPFILE" ] && rm -f "$TMPFILE"
 }
 trap '_cleanup_worktree' EXIT
 
@@ -76,13 +78,15 @@ fi
 # The agent template may already have a settings.json with pairing-level permissions.allow/deny;
 # we only override the allowWrite list so those pairing-specific rules are preserved.
 WRITABLE=$(jq '.writable_globs // []' "$MANIFEST_PATH")
-if [ -f "$WORKTREE_PATH/.claude/settings.json" ]; then
+SETTINGS="$WORKTREE_PATH/.claude/settings.json"
+if [ -f "$SETTINGS" ]; then
   # Merge: patch just allowWrite into the existing template config
   TMPFILE=$(mktemp)
   jq --argjson w "$WRITABLE" \
     '.sandbox.filesystem.allowWrite = $w' \
-    "$WORKTREE_PATH/.claude/settings.json" > "$TMPFILE"
-  mv "$TMPFILE" "$WORKTREE_PATH/.claude/settings.json"
+    "$SETTINGS" > "$TMPFILE"
+  mv "$TMPFILE" "$SETTINGS"
+  TMPFILE=""
 else
   # No template — emit minimal sandbox config
   jq -n --argjson w "$WRITABLE" '{
@@ -99,7 +103,7 @@ else
         ]
       }
     }
-  }' > "$WORKTREE_PATH/.claude/settings.json"
+  }' > "$SETTINGS"
 fi
 
 # Mark injected files skip-worktree so agent edits don't get accidentally committed.
@@ -116,28 +120,24 @@ fi
 # on disk the display reverts to H even when the CE_SKIP_WORKTREE bit (0x4000) is
 # set in the index — a display quirk, not a semantic failure.  Use
 # `git ls-files --debug` and inspect the flags field to confirm the bit is set.
-for fname in "settings.json" "CLAUDE.md"; do
-  fpath="$WORKTREE_PATH/.claude/$fname"
-  [ -f "$fpath" ] || continue
-  rel=".claude/$fname"
+mark_skip_worktree_if_tracked() {
+  local rel="$1"
   if git -C "$WORKTREE_PATH" ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
-    # File is tracked in git — update the index with injected content and mark skip-worktree
     git -C "$WORKTREE_PATH" add --force "$rel"
     git -C "$WORKTREE_PATH" update-index --skip-worktree "$rel"
   fi
-  # If untracked/gitignored: no action needed; gitignore prevents accidental staging
+  # If untracked/gitignored: no action needed; gitignore prevents accidental staging.
+}
+
+for fname in "settings.json" "CLAUDE.md"; do
+  [ -f "$WORKTREE_PATH/.claude/$fname" ] && mark_skip_worktree_if_tracked ".claude/$fname"
 done
 if [ -d "$WORKTREE_PATH/.claude/agents" ]; then
   for fpath in "$WORKTREE_PATH/.claude/agents/"*; do
-    [ -f "$fpath" ] || continue
-    rel=".claude/agents/$(basename "$fpath")"
-    if git -C "$WORKTREE_PATH" ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
-      git -C "$WORKTREE_PATH" add --force "$rel"
-      git -C "$WORKTREE_PATH" update-index --skip-worktree "$rel"
-    fi
+    [ -f "$fpath" ] && mark_skip_worktree_if_tracked ".claude/agents/$(basename "$fpath")"
   done
 fi
 
 # Return absolute worktree path to Claude Code on stdout
-_WORKTREE_CLEANUP=""
+WORKTREE_NEEDS_CLEANUP=0
 printf '%s\n' "$WORKTREE_PATH"

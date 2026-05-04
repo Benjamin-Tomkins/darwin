@@ -6,13 +6,20 @@ export function computeDelta(before, after) {
         thinking_delta: after.thinking - before.thinking,
     };
 }
-// CLI entry point: reads JSON array [before, after] from stdin, writes delta to stdout
+// ── CLI entry point ────────────────────────────────────────────────────────
+// Reads JSON array [before, after] from stdin, writes delta JSON to stdout.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const chunks = [];
     process.stdin.on('data', (c) => chunks.push(c));
     process.stdin.on('end', () => {
-        const [before, after] = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        process.stdout.write(JSON.stringify(computeDelta(before, after)) + '\n');
+        try {
+            const [before, after] = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            process.stdout.write(JSON.stringify(computeDelta(before, after)) + '\n');
+        }
+        catch (err) {
+            process.stderr.write(`token-delta: ${err.message}\n`);
+            process.exit(1);
+        }
     });
 }
 //# sourceMappingURL=token-delta.js.map

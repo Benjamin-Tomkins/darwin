@@ -55,7 +55,7 @@ For each element in ELEMENT_TREE that has at least one **asset-reference propert
 For each such property:
 1. Read the sibling `.adoc` file whose name is the property value (e.g., `impl: auth-impl.adoc` → read `auth-impl.adoc`).
 2. Extract the `[task]` block — YAML content between the line `[task]` and the next AsciiDoc block delimiter or section title.
-3. Parse: `pairing` (string, optional), `writable_globs` (list), `stop_criteria` (optional).
+3. Parse: `pairing` (string, optional), `writable_globs` (list), `readonly_globs` (list, optional), `stop_criteria` (optional).
 
 If `pairing` is absent from the `[task]` block, infer it:
 | Element type | Property key | Default pairing |
@@ -103,7 +103,7 @@ Then read Git trailer history from the task's branch:
 ```bash
 BRANCH=$(... branch-name output ...)
 git log "$BRANCH" \
-  --format='%(trailers:key=Try-Status,key=Tier,key=Pairing-Hash,key=Eval-Id,key=Failure-Class,key=Attempt)' \
+  --format='%(trailers:key=Try-Status,key=Tier,key=Pairing-Hash,key=Eval-Id,key=Failure-Class,key=Attempt,key=Problem,key=Hypothesis,key=Evidence)' \
   2>/dev/null
 ```
 

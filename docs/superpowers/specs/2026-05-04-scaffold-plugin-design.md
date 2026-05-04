@@ -46,6 +46,7 @@ Two skills. Both are Markdown files; the controller session follows their instru
 - Parses `plan.adoc` or `index.adoc` via the `parse-index` helper → element tree with asset property filenames
 - For each asset property (e.g. `impl: auth-impl.adoc`), reads the asset `.adoc` to extract its `[task]` block (pairing name, `writable_globs`, stop criteria). This is the C4-specific second step — `parse-index` only reads `index.adoc`; the per-asset config lives in the sibling asset files.
 - Loads the named pairing from `.claude/scaffold-pairings/<name>/pairing.yaml`. The pairing is the complete spec for one task: agent template (tools, scope, CLAUDE.md template, stop criteria) + eval pipeline (ordered, cheapest-first) + escalation-ladder overrides + circuit-breaker limits. If `pairing:` is omitted from the `[task]` block, the orchestrator infers it from element type and phase.
+- Detects **co-evolving pairs**: elements with both `tests:` and `impl:` asset properties. These run as concurrent Ralph loops; the controller enforces the tests gate (R12.9) before allowing `impl` to pass.
 - Builds task queue; reconstructs per-task state from Git trailers + `[task-state]` blocks
 - Drives the Ralph loop (see Section 5)
 - Monitors approximate context token usage; checkpoints at 80% of session limit
@@ -190,6 +191,36 @@ Derives: attempt count, current tier, Pairing-Hash (verified against on-disk pai
 
 **Concurrency:** unordered tasks fan out; ordered/dependent tasks sequence on upstream `●`. All ref-mutating Git operations (commit, branch update) are serialized by the controller regardless of concurrency level.
 
+**Co-evolving pairs (`tests:` + `impl:` on the same element):**
+
+`tests` and `impl` run as independent concurrent Ralph loops. Before running `impl`'s eval pipeline, the controller performs a **tests gate check** (pure Git — no external state):
+
+```
+tests_last_pass = timestamp of latest ● on agent/<slug>/tests
+impl_last_fail  = timestamp of latest ⊗ on agent/<slug>/impl
+
+gate open   = tests_last_pass > impl_last_fail   (tests seen all current failures)
+gate closed = tests not ● yet, OR gate stale
+```
+
+Gate closed → `failure_class: deps-missing`, `consumes_attempt: false`. Impl waits without burning an attempt.
+
+When impl generates a new `⊗` after tests `●` (gate goes stale), the controller triggers a **tests re-evaluation** — re-running the tests eval pipeline with the impl's `⊗` trailer corpus appended to every rubric judge prompt:
+
+```
+## Implementation failure history — assess test coverage of these scenarios:
+Attempt 3: PKCS#1 vs PKCS#8 key format not handled
+  hypothesis: validator assumed PKCS#8 only
+  evidence: "invalid key format" at validator.ts:67
+
+Attempt 4: empty token not handled
+  evidence: null pointer at validator.ts:45
+```
+
+This applies equally to subjective evals (LLM-judged architectural decisions, rubric-scored design reviews) and command evals. For command evals the test artifact is re-executed unchanged; the gate staleness check is still enforced. For rubric evals the judge gains concrete failure evidence to assess coverage against.
+
+Re-evaluation attempts triggered this way are classified `cross-task-reeval` and do not count against `max_attempts_total`. A separate `max_reeval_attempts` limit (default: 3) prevents runaway loops; exhausting it generates HANDOFF on the tests task.
+
 **Termination:** all tasks `●` → session ends with summary report. Any task `⊖` → HANDOFF.md generated, controller pauses; `/scaffold-worktree --resume <slug>` re-enters the loop.
 
 ---
@@ -213,5 +244,6 @@ This design is the deployment layer for the controller specified in `sparse-work
 - **R10** (skill interface): `/scaffold-init` + `/scaffold-worktree` are the two entry points
 - **R8.4–R8.6** (crash recovery): signal file + staged-diff resume paths
 - **R7.19–R7.20**: pre-spawn `[task-state]` write and context-limit checkpoint
+- **R12.8–R12.13**: co-evolving `tests`/`impl` pairs, tests gate, gate staleness, cross-task experience injection, re-evaluation attempt classification
 
 The controller spec remains normative for all loop semantics, eval contract, pairing schema, trailer vocabulary, and symbol definitions. This design doc covers only the Claude Code plugin shape and deployment mechanics.

@@ -1,20 +1,20 @@
-# Scaffold Plugin Architecture — Design
+# Darwin Plugin Architecture — Design
 
 ## Section 1: Plugin Structure
 
-The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the controller — an agentic session following the `scaffold-worktree.md` skill. No standalone process, daemon, or SDK loop is required.
+The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the controller — an agentic session following the `darwin-worktree.md` skill. No standalone process, daemon, or SDK loop is required.
 
 **Plugin layout:**
 
 ```
-~/.claude/plugins/superpowers/
+~/.claude/plugins/darwin/
 ├── skills/
-│   ├── scaffold-init.md          # /scaffold-init — project setup, runtime detection, pairing validation
-│   └── scaffold-worktree.md      # /scaffold-worktree — Ralph loop controller
+│   ├── darwin-init.md          # /darwin-init — project setup, runtime detection, pairing validation
+│   └── darwin-worktree.md      # /darwin-worktree — Ralph loop controller
 ├── hooks/
 │   ├── hooks.json                # registers WorktreeCreate + SubagentStop
 │   ├── worktree-create.sh        # sparse checkout, .claude/ injection, skip-worktree
-│   └── subagent-stop.sh          # writes signal to ~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json
+│   └── subagent-stop.sh          # writes signal to ~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json
 └── helpers/c4/
     ├── detect-runtime.sh         # Bun → Node 20+ → Deno; writes runtime.json
     ├── rt.sh                     # thin wrapper: delegates to detected pm
@@ -27,7 +27,7 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
     └── src/                      # TypeScript source
 ```
 
-State persistence is via Git trailers on `agent/<slug>` branches. `~/.claude/scaffold-state/` holds ephemeral runtime state (signal files, `runtime.json`) that does not enter version control.
+State persistence is via Git trailers on `agent/<slug>` branches. `~/.claude/darwin-state/` holds ephemeral runtime state (signal files, `runtime.json`) that does not enter version control.
 
 ---
 
@@ -35,17 +35,17 @@ State persistence is via Git trailers on `agent/<slug>` branches. `~/.claude/sca
 
 Two skills. Both are Markdown files; the controller session follows their instructions directly via the Bash and Agent tools.
 
-**`/scaffold-init`** (one-time setup per project):
-1. Detects JS runtime (`bun` → `node` 20+ → `deno`); stores `~/.claude/scaffold-state/runtime.json`; blocks if none found
+**`/darwin-init`** (one-time setup per project):
+1. Detects JS runtime (`bun` → `node` 20+ → `deno`); stores `~/.claude/darwin-state/runtime.json`; blocks if none found
 2. Adds `.claude/settings.json`, `.claude/agents/`, `.claude/CLAUDE.md` to project `.gitignore`
-3. Validates all `.claude/scaffold-pairings/*/pairing.yaml` files: schema, judge-model separation, slug uniqueness
+3. Validates all `.claude/darwin-pairings/*/pairing.yaml` files: schema, judge-model separation, slug uniqueness
 4. Verifies `escalation-ladder.json` exists and is not stale (default warn threshold: 30d)
 5. Reports summary: pairings loaded, runtime detected, ladder-id
 
-**`/scaffold-worktree <plan.adoc> [--base <ref>] [--resume <slug>]`** (per-run):
+**`/darwin-worktree <plan.adoc> [--base <ref>] [--resume <slug>]`** (per-run):
 - Parses `plan.adoc` or `index.adoc` via the `parse-index` helper → element tree with asset property filenames
 - For each asset property (e.g. `impl: auth-impl.adoc`), reads the asset `.adoc` to extract its `[task]` block (pairing name, `writable_globs`, stop criteria). This is the C4-specific second step — `parse-index` only reads `index.adoc`; the per-asset config lives in the sibling asset files.
-- Loads the named pairing from `.claude/scaffold-pairings/<name>/pairing.yaml`. The pairing is the complete spec for one task: agent template (tools, scope, CLAUDE.md template, stop criteria) + eval pipeline (ordered, cheapest-first) + escalation-ladder overrides + circuit-breaker limits. If `pairing:` is omitted from the `[task]` block, the orchestrator infers it from element type and phase.
+- Loads the named pairing from `.claude/darwin-pairings/<name>/pairing.yaml`. The pairing is the complete spec for one task: agent template (tools, scope, CLAUDE.md template, stop criteria) + eval pipeline (ordered, cheapest-first) + escalation-ladder overrides + circuit-breaker limits. If `pairing:` is omitted from the `[task]` block, the orchestrator infers it from element type and phase.
 - Detects **co-evolving pairs**: elements with both `tests:` and `impl:` asset properties. These run as concurrent Ralph loops; the controller enforces the tests gate (R12.9) before allowing `impl` to pass.
 - Builds task queue; reconstructs per-task state from Git trailers + `[task-state]` blocks
 - Drives the Ralph loop (see Section 5)
@@ -59,7 +59,7 @@ Two skills. Both are Markdown files; the controller session follows their instru
 
 The hook receives the planned worktree path on stdin JSON. It:
 1. Processes `.worktreeinclude` manually (native processing is disabled when this hook is registered)
-2. Creates the worktree at `~/.claude/scaffold-worktrees/<repo-hash>/<task-slug>/`
+2. Creates the worktree at `~/.claude/darwin-worktrees/<repo-hash>/<task-slug>/`
 3. Applies sparse checkout from `pairing.scope.readonly_globs + writable_globs`
 4. Injects `.claude/` contents (settings, agent definition, CLAUDE.md) from pairing-specific templates
 5. Runs `git update-index --skip-worktree` on each injected file so agent-local edits don't propagate to other branches
@@ -72,8 +72,8 @@ The hook receives the planned worktree path on stdin JSON. It:
 Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives the signal key from `cwd` by stripping the worktree base prefix:
 
 ```
-cwd:         ~/.claude/scaffold-worktrees/a3f9c1/auth-rs256
-signal path: ~/.claude/scaffold-state/a3f9c1/auth-rs256/signal.json
+cwd:         ~/.claude/darwin-worktrees/a3f9c1/auth-rs256
+signal path: ~/.claude/darwin-state/a3f9c1/auth-rs256/signal.json
 ```
 
 One signal path per task (not per session), so concurrent tasks on distinct branches never collide. The path is pre-computable by the controller before spawning and is stored in `[task-state]` as `signal_path`. Does not decide outcome — the controller reads the signal and drives all decisions.
@@ -115,7 +115,7 @@ Five pure-function CLIs compiled to plain ESM (`dist/`) at plugin build time. An
 | `validate-property` | element JSON + key + phase | Exit 0 = valid; exit 1 + stderr = violation |
 | `resolve-phase-transition` | `index.adoc` + element slug + new phase | Exit 0 = valid; emits `Phase-Transition: true` trailer if pairing-hash change is permitted without tripping R7.18's hash-drift halt |
 
-**Runtime detection** (once, at `/scaffold-init`):
+**Runtime detection** (once, at `/darwin-init`):
 
 ```bash
 # scripts/detect-runtime.sh — probes in preference order
@@ -124,22 +124,22 @@ elif node ≥ 20 available; then emit node  runtime JSON
 elif command -v deno;    then emit deno  runtime JSON (execution-only; npm/node still needed for build)
 else block with error
 fi
-# stores result in ~/.claude/scaffold-state/runtime.json
+# stores result in ~/.claude/darwin-state/runtime.json
 ```
 
 `scripts/rt.sh` reads `runtime.json` and delegates all `pm install` / `pm run` / `pm test` commands to the detected package manager. Compiled helpers in `dist/` are invoked by the controller skill via Bash as:
 
 ```bash
-EXEC=$(jq -r '.exec' ~/.claude/scaffold-state/runtime.json)
-FLAGS=$(jq -r '.run_flags[]' ~/.claude/scaffold-state/runtime.json)
-$EXEC $FLAGS ~/.claude/plugins/superpowers/helpers/c4/dist/parse-index.js --file ./index.adoc
+EXEC=$(jq -r '.exec' ~/.claude/darwin-state/runtime.json)
+FLAGS=$(jq -r '.run_flags[]' ~/.claude/darwin-state/runtime.json)
+$EXEC $FLAGS ~/.claude/plugins/darwin/helpers/c4/dist/parse-index.js --file ./index.adoc
 ```
 
 ---
 
 ## Section 5: Ralph Loop Data Flow
 
-**Entry:** user invokes `/scaffold-worktree docs/project/index.adoc`
+**Entry:** user invokes `/darwin-worktree docs/project/index.adoc`
 
 **Plan parsing:** skill calls `parse-index` helper → element tree → task queue (all elements with asset-reference properties not yet `●`).
 
@@ -160,8 +160,8 @@ Derives: attempt count, current tier, Pairing-Hash (verified against on-disk pai
 2.  Verify Pairing-Hash against on-disk pairing YAML; halt if mismatch (R7.18)
 3.  Build experience brief from fail trailers
 4.  Compute deterministically (before spawning):
-      worktree_path = ~/.claude/scaffold-worktrees/<repo-hash>/<task-slug>/
-      signal_path   = ~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json
+      worktree_path = ~/.claude/darwin-worktrees/<repo-hash>/<task-slug>/
+      signal_path   = ~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json
       agent_name    = <task-slug>-attempt-<N>
 5.  Write status: running + agent_name + worktree_path + signal_path to [task-state]
                                                         ← crash-recovery commit point
@@ -187,7 +187,7 @@ Derives: attempt count, current tier, Pairing-Hash (verified against on-disk pai
 | `status: running` | no | no | Discard worktree; reset to `◌`; retry at same tier. |
 | `status: ⊗` with no `↺` | — | — | Complete rollback; then retry. |
 
-**Context limit checkpoint:** at 80% of session context, the controller finishes the current task, flushes all open `[task-state]` blocks to disk, and surfaces: "context limit approaching — re-invoke `/scaffold-worktree` to continue." The next session reconstructs cleanly from Git + `[task-state]`.
+**Context limit checkpoint:** at 80% of session context, the controller finishes the current task, flushes all open `[task-state]` blocks to disk, and surfaces: "context limit approaching — re-invoke `/darwin-worktree` to continue." The next session reconstructs cleanly from Git + `[task-state]`.
 
 **Concurrency:** unordered tasks fan out; ordered/dependent tasks sequence on upstream `●`. All ref-mutating Git operations (commit, branch update) are serialized by the controller regardless of concurrency level.
 
@@ -233,7 +233,7 @@ Neither agent has to re-derive what the top-tier model already reasoned. The ins
 
 Re-evaluation attempts triggered by gate staleness are classified `cross-task-reeval` and do not count against `max_attempts_total`. A separate `max_reeval_attempts` limit (default: 3) prevents runaway loops; exhausting it generates HANDOFF on the tests task.
 
-**Termination:** all tasks `●` → session ends with summary report. Any task `⊖` → HANDOFF.md generated, controller pauses; `/scaffold-worktree --resume <slug>` re-enters the loop.
+**Termination:** all tasks `●` → session ends with summary report. Any task `⊖` → HANDOFF.md generated, controller pauses; `/darwin-worktree --resume <slug>` re-enters the loop.
 
 ---
 
@@ -243,7 +243,7 @@ Re-evaluation attempts triggered by gate staleness are classified `cross-task-re
 - CI/CD integration (invocation is always by a human-initiated Claude Code session)
 - Windows support (Seatbelt/bubblewrap sandbox not available)
 - Deno as a build/test runtime (execution-only; vitest requires Bun or Node)
-- Per-element `.gitignore` files (project `.gitignore` seeded by `/scaffold-init` handles all injected operational files)
+- Per-element `.gitignore` files (project `.gitignore` seeded by `/darwin-init` handles all injected operational files)
 
 ---
 
@@ -253,7 +253,7 @@ This design is the deployment layer for the controller specified in `sparse-work
 
 - **Open Question #10** (now closed): Claude Code IS the controller — skill-driven agentic session
 - **Hook architecture**: WorktreeCreate + SubagentStop as specified in the Hook Architecture section
-- **R10** (skill interface): `/scaffold-init` + `/scaffold-worktree` are the two entry points
+- **R10** (skill interface): `/darwin-init` + `/darwin-worktree` are the two entry points
 - **R8.4–R8.6** (crash recovery): signal file + staged-diff resume paths
 - **R7.19–R7.20**: pre-spawn `[task-state]` write and context-limit checkpoint
 - **R12.8–R12.13**: co-evolving `tests`/`impl` pairs, tests gate, gate staleness, cross-task experience injection, re-evaluation attempt classification

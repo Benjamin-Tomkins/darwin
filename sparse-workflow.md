@@ -190,7 +190,7 @@ coordination, non-git VCS support, multi-repo / submodule support.
 ## Project Initialisation
 
 ```
-          /scaffold-init  (one-time per project)
+          /darwin-init  (one-time per project)
                           │
                           ▼
               ┌─────────────────────────┐
@@ -201,7 +201,7 @@ coordination, non-git VCS support, multi-repo / submodule support.
                            ▼
               ┌─────────────────────────┐
               │  Discover pairings:     │
-              │  .claude/scaffold-      │
+              │  .claude/darwin-        │
               │    pairings/*/          │
               │  Validate judge-model   │
               │  separation             │
@@ -235,11 +235,11 @@ historical attempts remain traceable across regenerations.
 
 ### Pairing discovery
 
-At init time, `/scaffold-init` walks `.claude/scaffold-pairings/` and validates
+At init time, `/darwin-init` walks `.claude/darwin-pairings/` and validates
 each pairing's configuration. Default pairings are scaffolded if none exist:
 
 ```
-.claude/scaffold-pairings/
+.claude/darwin-pairings/
 ├── implementer-with-tests/
 │   └── pairing.yaml
 ├── test-author-with-meta-rubric/
@@ -271,12 +271,12 @@ Failures are reported with line numbers; init refuses to complete with bad pairi
 ┌──────────────────────────────────────────────────────────────────────┐
 │                       PARENT CONTROLLER                              │
 │      (skill-driven agentic Claude Code session; follows             │
-│       scaffold-worktree.md; loop runs autonomously via Git trailers) │
+│       darwin-worktree.md; loop runs autonomously via Git trailers) │
 │                                                                      │
 │  THIS IS THE STATE MACHINE. Hooks are signals.                       │
 │                                                                      │
 │  • Reads plan.adoc → finds active task, its [task] config + pairing  │
-│  • Loads (agent, eval) pairing from .claude/scaffold-pairings/       │
+│  • Loads (agent, eval) pairing from .claude/darwin-pairings/       │
 │  • Reads agent/<slug> branch via Git trailers → derives state        │
 │  • Builds experience brief from trailers (filtered to Try-Status:    │
 │    fail; excludes rollback / infra / widen)                          │
@@ -354,7 +354,7 @@ Failures are reported with line numbers; init refuses to complete with bad pairi
             ╔═══════════════════════════════════════════════════════════╗
             ║          ONE-TIME ENTRY                                   ║
             ╠═══════════════════════════════════════════════════════════╣
-            ║   /scaffold-worktree plan.adoc                            ║
+            ║   /darwin-worktree plan.adoc                            ║
             ║         │                                                 ║
             ║         ▼                                                 ║
             ║   Parent controller starts                                ║
@@ -877,7 +877,7 @@ A pairing bundles an agent template with an eval pipeline and any
 escalation-ladder overrides specific to that combination.
 
 ```yaml
-# .claude/scaffold-pairings/c4-designer-with-rubric/pairing.yaml
+# .claude/darwin-pairings/c4-designer-with-rubric/pairing.yaml
 
 name: c4-designer-with-rubric
 description: |
@@ -885,7 +885,7 @@ description: |
   Judged by render success + LLM convention rubric.
 
 agent:
-  template: diagram-author       # references .claude/scaffold-agents/<template>/
+  template: diagram-author       # references .claude/darwin-agents/<template>/
   tools:
     allow: [Read, Edit, Write, Grep, Glob]
     deny: [Bash, Task]
@@ -1023,8 +1023,8 @@ across concurrent tasks.
 ----
 status: running
 agent_name: auth-rs256-attempt-4
-worktree_path: /Users/alice/.claude/scaffold-worktrees/a3f9c1/auth-rs256
-signal_path: /Users/alice/.claude/scaffold-state/a3f9c1/auth-rs256/signal.json
+worktree_path: /Users/alice/.claude/darwin-worktrees/a3f9c1/auth-rs256
+signal_path: /Users/alice/.claude/darwin-state/a3f9c1/auth-rs256/signal.json
 last_attempt: 4
 branch: agent/auth-rs256
 ladder_id: 2026-05-03T14:22:00Z
@@ -1268,7 +1268,7 @@ tier — repeated-diff breaker tripped.
    *requires architectural change*
 
 ### Resume
-After addressing one of the options, `/scaffold-worktree plan.adoc --resume <slug>`
+After addressing one of the options, `/darwin-worktree plan.adoc --resume <slug>`
 ```
 
 When the trigger is `failure_class: upstream-constraint` (R12.6), the HANDOFF
@@ -1358,7 +1358,7 @@ Git is authoritative. Recovery rules:
 | `[task-state]` shows `status: running` AND signal file exists at `signal_path` | Controller crashed after subagent finished but before eval ran. Do NOT re-spawn. Snapshot staged diff from `worktree_path`; re-run eval pipeline; commit result normally. |
 | `[task-state]` shows `status: running` AND no signal file AND worktree has staged changes | Both controller and subagent crashed; agent had work in progress. Treat staged diff as the agent's output: re-run eval pipeline. On pass commit ●; on fail commit ⊗ + ↺ and retry. |
 | `[task-state]` shows `status: running` AND no signal file AND worktree is clean | Controller crashed before or during spawn, or subagent crashed immediately without producing output. Discard worktree contents, reset `[task-state]` to `status: ◌`, retry attempt at same tier. |
-| Controller session context limit reached mid-loop | Controller updates all open `[task-state]` blocks to their current status, emits a checkpoint message, and stops. User re-invokes `/scaffold-worktree` to continue; new session reconstructs state from Git and `[task-state]`. |
+| Controller session context limit reached mid-loop | Controller updates all open `[task-state]` blocks to their current status, emits a checkpoint message, and stops. User re-invokes `/darwin-worktree` to continue; new session reconstructs state from Git and `[task-state]`. |
 
 ---
 
@@ -1369,7 +1369,7 @@ Now extended to cover eval outputs as an attack surface.
 ```
 Trusted:
   • Scaffold hook scripts (versioned in repo)
-  • Pairing definitions in .claude/scaffold-pairings/ (versioned)
+  • Pairing definitions in .claude/darwin-pairings/ (versioned)
   • plan.adoc when authored by trusted human (commits signed)
   • escalation-ladder.json (locally generated)
   • Parent controller code
@@ -1426,9 +1426,9 @@ pass"). Mitigations, in defense-in-depth order from strongest to weakest:
 Worktrees live outside the project repo to avoid nested-worktree confusion:
 
 ```
-~/.claude/scaffold-worktrees/<repo-hash>/<task-slug>/
+~/.claude/darwin-worktrees/<repo-hash>/<task-slug>/
 ├── .clauderules                  # readonly file/range sentinels
-├── .gitignore                    # inherited from project (seeded by /scaffold-init)
+├── .gitignore                    # inherited from project (seeded by /darwin-init)
 ├── HANDOFF.md                    # generated on ⊖ only
 ├── <writable artifacts>          # per pairing's scope.writable_globs
 ├── <readonly context>            # per pairing's scope.readonly_globs
@@ -1441,7 +1441,7 @@ Worktrees live outside the project repo to avoid nested-worktree confusion:
 The `.claude/` contents are generated from the **pairing's agent template**
 and injected by `WorktreeCreate`; a c4-designer worktree has different
 injected content than an implementer worktree. Because these files are
-already tracked by the project (added to `.gitignore` by `/scaffold-init`),
+already tracked by the project (added to `.gitignore` by `/darwin-init`),
 `WorktreeCreate` runs `git update-index --skip-worktree` on each injected
 file so the agent's local modifications do not propagate to other branches.
 
@@ -1453,7 +1453,7 @@ file so the agent's local modifications do not propagate to other branches.
 |------|-------|---------|
 | `WorktreeCreate` | parent | Replaces git default (`.worktreeinclude` is NOT processed when this hook is registered — hook processes it manually). Hook: creates worktree, applies sparse checkout from `pairing.scope.readonly_globs + writable_globs`, runs validation closure, injects `.claude/` (settings, agent definition, CLAUDE.md) from pairing-specific templates, runs `git update-index --skip-worktree` on each injected file so agent edits stay local. Returns absolute worktree path on stdout. |
 | `PreToolUse:Edit`/`PreToolUse:Write` | agent | Enforces writable allowlist + protected tag regions. Allowlist comes from pairing's `scope.writable_globs`. |
-| `SubagentStop` | parent (signal) | Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives signal key from `cwd`: strips `~/.claude/scaffold-worktrees/` prefix to obtain `<repo-hash>/<task-slug>`. Writes signal to `~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json` (outside worktree; one path per task, not per session, so concurrent tasks on distinct branches never collide). Does not decide outcome — controller reads signal and drives the loop. |
+| `SubagentStop` | parent (signal) | Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives signal key from `cwd`: strips `~/.claude/darwin-worktrees/` prefix to obtain `<repo-hash>/<task-slug>`. Writes signal to `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json` (outside worktree; one path per task, not per session, so concurrent tasks on distinct branches never collide). Does not decide outcome — controller reads signal and drives the loop. |
 
 ---
 
@@ -1566,12 +1566,12 @@ This prevents:
 
 | | Requirement | Priority |
 |---|---|---|
-| R0.1 | `/scaffold-init` queries available models, builds escalation ladder, validates pairings | Must |
+| R0.1 | `/darwin-init` queries available models, builds escalation ladder, validates pairings | Must |
 | R0.2 | Ladder file at `.claude/escalation-ladder.json` includes `ladder_id`, `ladder` array | Must |
 | R0.3 | Ladder file is gitignored | Must |
-| R0.4 | `/scaffold-init` is idempotent | Must |
-| R0.5 | `/scaffold-worktree` fails if ladder doesn't exist | Must |
-| R0.6 | `/scaffold-init` discovers and validates `.claude/scaffold-pairings/*/pairing.yaml` | Must |
+| R0.4 | `/darwin-init` is idempotent | Must |
+| R0.5 | `/darwin-worktree` fails if ladder doesn't exist | Must |
+| R0.6 | `/darwin-init` discovers and validates `.claude/darwin-pairings/*/pairing.yaml` | Must |
 | R0.7 | Pairing validation includes judge-model separation check | Must |
 | R0.8 | Stale-ladder warning if older than configurable threshold (default 30d) | Should |
 | R0.9 | Default pairings shipped at init unless `--no-defaults` | Should |
@@ -1590,13 +1590,13 @@ This prevents:
 | R1.7 | `[task-state]` is reconcilable from Git on resume; Git authoritative | Must |
 | R1.8 | `[IMPORTANT]` blocks default to starting at tier 2 (decoupled from `permissionMode`) | Should |
 | R1.9 | `depends_on:` lists in `[task]` block drive dependency graph ordering | Should |
-| R1.10 | `[task-state]` fields `agent_name`, `worktree_path`, and `signal_path` are written atomically with `status: running` before the Agent tool is called; these fields are overwritten on each new spawn attempt. `agent_name` is `<task-slug>-attempt-<N>`; `signal_path` is derived from `worktree_path` as `~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json`. | Must |
+| R1.10 | `[task-state]` fields `agent_name`, `worktree_path`, and `signal_path` are written atomically with `status: running` before the Agent tool is called; these fields are overwritten on each new spawn attempt. `agent_name` is `<task-slug>-attempt-<N>`; `signal_path` is derived from `worktree_path` as `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json`. | Must |
 
 ### R2 — Worktree creation
 
 | | Requirement | Priority |
 |---|---|---|
-| R2.1 | Worktrees live OUTSIDE project repo (`~/.claude/scaffold-worktrees/<repo-hash>/<slug>/`) | Must |
+| R2.1 | Worktrees live OUTSIDE project repo (`~/.claude/darwin-worktrees/<repo-hash>/<slug>/`) | Must |
 | R2.2 | `WorktreeCreate` hook REPLACES Claude Code's git default | Must |
 | R2.3 | Hook receives only `name`; pairing + task config passed via parent-owned manifest | Must |
 | R2.4 | Branch named `agent/<slug>` from caller-specified base ref | Must |
@@ -1683,7 +1683,7 @@ This prevents:
 | R7.17 | First commit on an `agent/<slug>` branch records `Pairing-Hash` (SHA-256 of canonicalised pairing YAML); all subsequent commits on that branch must carry the same `Pairing-Hash`. The branch is pinned to that pairing version for its lifetime. | Must |
 | R7.18 | If the on-disk pairing YAML hashes differently from the branch's `Pairing-Hash` mid-run, the task halts with `failure_class: needs-human` and HANDOFF naming the hash mismatch. Pairings are immutable per task instance. | Must |
 | R7.19 | Before invoking the Agent tool, controller writes `status: running`, `agent_name` (`<task-slug>-attempt-<N>`), `worktree_path`, and `signal_path` to the task's `[task-state]` block. Sets the agent definition's `name:` field to `agent_name`. This is the crash-recovery commit point: any later interruption leaves detectable state. | Must |
-| R7.20 | Controller monitors approximate context token usage after each task completion. At 80% of the session context limit, it finishes the current task, updates all open `[task-state]` blocks to their latest status, and emits a checkpoint message instructing the user to re-invoke `/scaffold-worktree` to continue. The following session reconstructs full state from Git trailers and `[task-state]`. | Must |
+| R7.20 | Controller monitors approximate context token usage after each task completion. At 80% of the session context limit, it finishes the current task, updates all open `[task-state]` blocks to their latest status, and emits a checkpoint message instructing the user to re-invoke `/darwin-worktree` to continue. The following session reconstructs full state from Git trailers and `[task-state]`. | Must |
 
 ### R8 — Crash recovery
 
@@ -1702,16 +1702,16 @@ This prevents:
 |---|---|---|
 | R9.1 | Agent worktree sandbox is enabled with `allowUnsandboxedCommands: false` and `failIfUnavailable: true` (no silent fallback to unsandboxed execution) | Must |
 | R9.2 | Agent worktree scratch is limited to the paths declared in `sandbox.filesystem.allowWrite`; no additional scratch directory is provided. (`CLAUDE_CODE_TMPDIR` is not used — it does not apply to subagents spawned via the Agent tool.) | Must |
-| R9.3 | Controller signal state (`SubagentStop` output) is written to `~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json` (derived from `cwd`, not from session ID), outside the worktree, so it survives worktree cleanup, is never staged, and does not collide across concurrent tasks on distinct branches. | Must |
+| R9.3 | Controller signal state (`SubagentStop` output) is written to `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json` (derived from `cwd`, not from session ID), outside the worktree, so it survives worktree cleanup, is never staged, and does not collide across concurrent tasks on distinct branches. | Must |
 | R9.4 | Eval sandbox is a separate environment from the agent worktree (R5.6); the two never share filesystem state | Must |
 
 ### R10 — Skill interface
 
 | | Requirement | Priority |
 |---|---|---|
-| R10.1 | `/scaffold-init` initialises project, validates pairings, detects JS runtime (`bun` → `node` 20+ → `deno`) and stores result in `~/.claude/scaffold-state/runtime.json`; blocks if no supported runtime found | Must |
-| R10.2 | `/scaffold-worktree <plan.adoc> [--base <ref>] [--resume <slug>]` invokes parent controller | Must |
-| R10.3 | `/scaffold-worktree` reads `[task]` and `[task-state]` from plan.adoc; loads pairing | Must |
+| R10.1 | `/darwin-init` initialises project, validates pairings, detects JS runtime (`bun` → `node` 20+ → `deno`) and stores result in `~/.claude/darwin-state/runtime.json`; blocks if no supported runtime found | Must |
+| R10.2 | `/darwin-worktree <plan.adoc> [--base <ref>] [--resume <slug>]` invokes parent controller | Must |
+| R10.3 | `/darwin-worktree` reads `[task]` and `[task-state]` from plan.adoc; loads pairing | Must |
 | R10.4 | Unordered tasks fan out concurrently; ordered/dependent tasks sequence on completion | Must |
 | R10.5 | Resumes interrupted sessions via per-task state | Should |
 | R10.6 | Reports summary: worktrees, file views, permissions, ladder-id, pairings used | Should |
@@ -1759,7 +1759,7 @@ This prevents:
 |---|---|---|
 | R13.1 | On `TaskBlocked`, parent generates `HANDOFF.md` per the structure in the "HANDOFF.md" section above (pairing, attempts, models, eval breakdown, current hypothesis, unblocking options, resume command) | Must |
 | R13.2 | HANDOFF includes the trigger reason: circuit-breaker name, exhaustion of escalation ladder, `needs-human` from an eval, or `upstream-constraint` with the upstream slug | Must |
-| R13.3 | After HANDOFF generation, parent stops spawning further attempts on the task until the operator invokes `/scaffold-worktree --resume <slug>` | Must |
+| R13.3 | After HANDOFF generation, parent stops spawning further attempts on the task until the operator invokes `/darwin-worktree --resume <slug>` | Must |
 | R13.4 | HANDOFF is not committed to the agent branch; it lives in the worktree alongside artifacts and is regenerated on each block event | Must |
 
 ### R14 — C4 plan format adapter
@@ -1768,7 +1768,7 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
 
 | | Requirement | Priority |
 |---|---|---|
-| R14.1 | `/scaffold-worktree --c4 <plan-dir>` accepts a directory containing `index.adoc`; controller treats the embedded `[source,structurizr]` block as the canonical plan source | Must |
+| R14.1 | `/darwin-worktree --c4 <plan-dir>` accepts a directory containing `index.adoc`; controller treats the embedded `[source,structurizr]` block as the canonical plan source | Must |
 | R14.2 | Controller parses the Structurizr DSL block out of `index.adoc`; extracts elements, `properties`, `technology`, `tags`, and the inline `// tag::name[]` regions that mark each workflow-spawning element | Must |
 | R14.3 | Every workflow-spawning DSL element MUST declare an immutable `"slug"` property (kebab-case, unique within the parent's children); controller validates uniqueness at parse time and refuses to scaffold on collision | Must |
 | R14.4 | Asset-reference property keys whose value ends in `.adoc` spawn an asset workflow on commit. Standard keys recognised by the controller: `detail`, `bdd`, `tests`, `impl`. Custom keys are permitted and treated identically | Must |
@@ -1791,7 +1791,7 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
 | Constraint | Detail |
 |---|---|
 | Git version | 2.32+ (`git interpret-trailers --parse`) |
-| JS runtime | Bun, Node.js 20+, or Deno; detected by `/scaffold-init`, stored in `~/.claude/scaffold-state/runtime.json`. Bun and Node support build + execution; Deno is execution-only (pre-compiled ESM helpers only). |
+| JS runtime | Bun, Node.js 20+, or Deno; detected by `/darwin-init`, stored in `~/.claude/darwin-state/runtime.json`. Bun and Node support build + execution; Deno is execution-only (pre-compiled ESM helpers only). |
 | Sandbox availability | bubblewrap on Linux/WSL2, Seatbelt on macOS; Windows not supported |
 | Hook timing | Sparse checkout, `.worktreeinclude` processing, `.claude/` injection, `git update-index --skip-worktree` in `WorktreeCreate` only |
 | Hook scope | `WorktreeCreate` REPLACES Claude Code's git default |
@@ -1802,7 +1802,7 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
 | Judge-model separation | Rubric evals must use a different model from the agent |
 | Commit pairing | Every `⊗` immediately followed by `↺`; `●` terminal; `⚠`/`↻` standalone |
 | Escalation ladder | Built dynamically; `Ladder-Id` trailer makes historical commits valid across regenerations |
-| Pairings | Loaded from `.claude/scaffold-pairings/`; validated at init |
+| Pairings | Loaded from `.claude/darwin-pairings/`; validated at init |
 | Worktree location | Outside project repo to avoid nested-worktree confusion |
 | Symbol rendering | Verify `◌●◎⊗⊖⊘↺↻⚠◈◉` across target environments |
 | Cost asymmetry | Top-tier is ~5× entry tier per token; circuit breakers prevent runaway loops |
@@ -1827,7 +1827,7 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
    the parent estimate per-attempt cost for circuit breakers when each
    attempt may invoke 1+ judge calls?
 
-4. **Eval discovery** — Should `/scaffold-init` autosuggest pairings based
+4. **Eval discovery** — Should `/darwin-init` autosuggest pairings based
    on the project's languages/frameworks (e.g. detect `package.json` →
    suggest `implementer-with-tests`)?
 
@@ -1860,7 +1860,7 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
 10. ~~**Parent controller deployment** — Long-lived Claude Agent SDK process,
     orchestrating Claude Code session, or external script?~~ *Resolved:
     Claude Code IS the controller — an agentic session following the
-    `scaffold-worktree.md` skill in the sparse-workflow plugin. The loop runs
+    `darwin-worktree.md` skill in the darwin plugin. The loop runs
     autonomously within a single Claude Code session; state persistence is via
     Git trailers. Plugin structure: skills (markdown), WorktreeCreate +
     SubagentStop hooks (shell scripts), TypeScript helpers for precision

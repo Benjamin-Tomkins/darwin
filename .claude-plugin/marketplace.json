@@ -1,0 +1,14 @@
+{
+  "name": "darwin-local",
+  "owner": {
+    "name": "Benjamin Tomkins"
+  },
+  "description": "Local marketplace for the Darwin Ralph loop controller plugin",
+  "plugins": [
+    {
+      "name": "darwin",
+      "source": "./.claude/plugins/darwin",
+      "description": "Ralph loop controller — drives self-healing agent/eval pairs with automatic retry, circuit breakers, and sparse worktree isolation."
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "darwin-local": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "enabledPlugins": {
+    "darwin@darwin-local": true
+  }
+}

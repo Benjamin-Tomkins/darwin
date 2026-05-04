@@ -3,7 +3,9 @@
 .claude/darwin-worktrees/
 
 # Operational files injected into worktrees at runtime
-.claude/settings.json
+# Note: .claude/settings.json is NOT ignored here — it is committed as project-level
+# Claude Code config (extraKnownMarketplaces, enabledPlugins). Agent worktrees have
+# it marked skip-worktree by worktree-create.sh to prevent accidental agent commits.
 .claude/CLAUDE.md
 .claude/agents/
 .claude/escalation-ladder.json

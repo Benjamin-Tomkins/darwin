@@ -31,7 +31,28 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
     └── src/                      # TypeScript source
 ```
 
-The plugin lives at `.claude/plugins/darwin/` inside the repo and is committed to git. Claude Code discovers it automatically when running in the repo directory via `CLAUDE_PLUGIN_ROOT`. Compiled artifacts (`bin/*.js`) are also committed so no build step is required at runtime.
+The plugin lives at `.claude/plugins/darwin/` inside the repo and is committed to git. `${CLAUDE_PLUGIN_ROOT}` is set by Claude Code to the plugin's installation directory when it is loaded. Compiled artifacts (`bin/*.js`) are also committed so no build step is required at runtime.
+
+**Plugin manifest** (`.claude/plugins/darwin/.claude-plugin/plugin.json`): optional metadata file with `name`, `description`, and `author`. No `version` field — Claude Code uses the git commit SHA so every commit is treated as a new version during active development.
+
+**Local marketplace** (`.claude-plugin/marketplace.json` at repo root): makes the repo itself a Claude Code marketplace catalog. Points the `darwin` plugin at `./.claude/plugins/darwin`. Users add it once with `/plugin marketplace add .` or it is registered automatically via `extraKnownMarketplaces`.
+
+**Project settings** (`.claude/settings.json`, committed to git): registers the local marketplace and enables the Darwin plugin at project scope. When any collaborator opens Claude Code in this repo, Claude Code reads this file, registers the `darwin-local` marketplace, and enables Darwin automatically — no `--plugin-dir` flag required.
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "darwin-local": {
+      "source": { "source": "directory", "path": "." }
+    }
+  },
+  "enabledPlugins": {
+    "darwin@darwin-local": true
+  }
+}
+```
+
+`.claude/settings.json` is committed here (unlike Darwin-managed target projects where it is runtime-injected). Agent worktrees have it marked `skip-worktree` by `worktree-create.sh` to prevent the injected sandbox config from being committed.
 
 `.gitignore` must exclude runtime-only paths while allowing the plugin source:
 

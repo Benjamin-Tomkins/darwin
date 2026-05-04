@@ -43,9 +43,10 @@ Two skills. Both are Markdown files; the controller session follows their instru
 5. Reports summary: pairings loaded, runtime detected, ladder-id
 
 **`/scaffold-worktree <plan.adoc> [--base <ref>] [--resume <slug>]`** (per-run):
-- Parses `plan.adoc` or `index.adoc` via the `parse-index` helper
-- Builds task queue from element tree
-- Reconstructs per-task state from Git trailers + `[task-state]` blocks
+- Parses `plan.adoc` or `index.adoc` via the `parse-index` helper → element tree with asset property filenames
+- For each asset property (e.g. `impl: auth-impl.adoc`), reads the asset `.adoc` to extract its `[task]` block (pairing name, `writable_globs`, stop criteria). This is the C4-specific second step — `parse-index` only reads `index.adoc`; the per-asset config lives in the sibling asset files.
+- Loads the named pairing from `.claude/scaffold-pairings/<name>/pairing.yaml`. The pairing is the complete spec for one task: agent template (tools, scope, CLAUDE.md template, stop criteria) + eval pipeline (ordered, cheapest-first) + escalation-ladder overrides + circuit-breaker limits. If `pairing:` is omitted from the `[task]` block, the orchestrator infers it from element type and phase.
+- Builds task queue; reconstructs per-task state from Git trailers + `[task-state]` blocks
 - Drives the Ralph loop (see Section 5)
 - Monitors approximate context token usage; checkpoints at 80% of session limit
 
@@ -153,21 +154,25 @@ Derives: attempt count, current tier, Pairing-Hash (verified against on-disk pai
 **Loop kernel (per task):**
 
 ```
-1.  Load pairing → verify Pairing-Hash
-2.  Build experience brief from fail trailers
-3.  Compute deterministically (before spawning):
+1.  Read asset .adoc [task] block → resolve pairing name → load pairing YAML
+    (pairing defines: agent template, eval pipeline, scope, escalation, circuit breakers)
+2.  Verify Pairing-Hash against on-disk pairing YAML; halt if mismatch (R7.18)
+3.  Build experience brief from fail trailers
+4.  Compute deterministically (before spawning):
       worktree_path = ~/.claude/scaffold-worktrees/<repo-hash>/<task-slug>/
       signal_path   = ~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json
       agent_name    = <task-slug>-attempt-<N>
-4.  Write status: running + agent_name + worktree_path + signal_path to [task-state]
+5.  Write status: running + agent_name + worktree_path + signal_path to [task-state]
                                                         ← crash-recovery commit point
-5.  Set name: agent_name in agent frontmatter (for observability in transcripts/logs)
-6.  WorktreeCreate hook → creates worktree at worktree_path; sparse checkout + .claude/ injection
-7.  Spawn subagent (Agent tool, fresh invocation — blocks until subagent stops)
-8.  SubagentStop hook fires → derives signal_path from cwd; writes signal file
-9.  Controller reads signal → snapshot staged diff (git diff --staged in worktree)
-10. Run eval pipeline in isolated sandbox (cheapest-first, declared order)
-11. Verdict:
+6.  Set name: agent_name in agent frontmatter (for observability in transcripts/logs)
+7.  WorktreeCreate hook → creates worktree at worktree_path; sparse checkout + .claude/ injection
+    (uses pairing.scope.writable_globs + readonly_globs for sparse checkout;
+     pairing's agent template populates .claude/CLAUDE.md, settings.json, agents/task-agent.md)
+8.  Spawn subagent (Agent tool, fresh invocation — blocks until subagent stops)
+9.  SubagentStop hook fires → derives signal_path from cwd; writes signal file
+10. Controller reads signal → snapshot staged diff (git diff --staged in worktree)
+11. Run eval pipeline in isolated sandbox (pairing.evals, cheapest-first, declared order)
+12. Verdict:
       pass  → commit ● + trailers → update [task-state] → done
       fail  → commit ⊗ + ↺ → check circuit breakers → retry/escalate/widen/HANDOFF
 ```

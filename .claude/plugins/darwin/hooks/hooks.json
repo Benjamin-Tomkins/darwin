@@ -1,11 +1,12 @@
 {
+  "description": "WorktreeCreate and SubagentStop hooks for the Darwin Ralph loop controller",
   "hooks": {
     "WorktreeCreate": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.sh\"",
             "async": false
           }
         ]
@@ -16,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.sh\"",
             "async": false
           }
         ]

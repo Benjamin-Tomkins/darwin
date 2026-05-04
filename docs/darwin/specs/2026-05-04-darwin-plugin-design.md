@@ -18,7 +18,7 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
 └── helpers/c4/
     ├── detect-runtime.sh         # Bun → Node 20+ → Deno; writes runtime.json
     ├── rt.sh                     # thin wrapper: delegates to detected pm
-    ├── dist/
+    ├── bin/
     │   ├── parse-index.js        # index.adoc → element tree (compiled ESM)
     │   ├── branch-name.js        # slug chain → canonical branch string
     │   ├── format-trailers.js    # commit metadata → Git trailer block
@@ -108,7 +108,7 @@ Note: `session_id` in the hook input is the **parent** controller's session ID, 
 
 ## Section 4: TypeScript Helper Layer
 
-Six pure-function CLIs compiled to plain ESM (`dist/`) at plugin build time. Any Bun / Node 20+ / Deno installation can execute them without a compile step at runtime.
+Six pure-function CLIs compiled to plain ESM (`bin/`) at plugin build time. Any Bun / Node 20+ / Deno installation can execute them without a compile step at runtime.
 
 | Helper | Input | Output |
 |---|---|---|
@@ -131,12 +131,12 @@ fi
 # stores result in ~/.claude/darwin-state/runtime.json
 ```
 
-`scripts/rt.sh` reads `runtime.json` and delegates all `pm install` / `pm run` / `pm test` commands to the detected package manager. Compiled helpers in `dist/` are invoked by the controller skill via Bash as:
+`scripts/rt.sh` reads `runtime.json` and delegates all `pm install` / `pm run` / `pm test` commands to the detected package manager. Compiled helpers in `bin/` are invoked by the controller skill via Bash as:
 
 ```bash
 EXEC=$(jq -r '.exec' ~/.claude/darwin-state/runtime.json)
 FLAGS=$(jq -r '.run_flags[]' ~/.claude/darwin-state/runtime.json)
-$EXEC $FLAGS ~/.claude/plugins/darwin/helpers/c4/dist/parse-index.js --file ./index.adoc
+$EXEC $FLAGS ~/.claude/plugins/darwin/helpers/c4/bin/parse-index.js --file ./index.adoc
 ```
 
 ---

@@ -5,7 +5,13 @@ description: Drives the Darwin Ralph loop controller, executing plan tasks via s
 
 # /darwin-worktree
 
-You are the Darwin parent controller — a Claude Code session following these instructions. Drive the Ralph loop to completion for all tasks in the plan. Do not delegate decisions to the agent or to evaluators. You own the loop.
+You are the Ralph loop controller. Drive the loop to completion for all tasks in the plan. Do not delegate decisions to the agent or to evaluators. You own the loop.
+
+## Output format
+
+Use TaskCreate at startup — one task per plan element being executed, named by slug (e.g. `api-impl`, `worker-tests`). Mark each in_progress when the agent is spawned and completed when `●`. The native task list shows progress automatically.
+
+Every status update to the user is one line. No verbose narration between loop steps.
 
 ---
 
@@ -56,7 +62,7 @@ find docs -name "*.adoc" 2>/dev/null | grep -v index.adoc
 
 ---
 
-## Step 1: Parse the plan
+## Parse the plan
 
 Set shell variables:
 ```bash
@@ -76,7 +82,7 @@ If `--c4` was passed, the DSL block is embedded in `index.adoc`; `parse-index` h
 
 ---
 
-## Step 2: Load asset configurations
+## Load asset configurations
 
 For each element in ELEMENT_TREE that has at least one **asset-reference property** (`impl`, `tests`, `bdd`, `detail`):
 
@@ -97,7 +103,7 @@ Resolve the pairing name by reading `.claude/darwin-pairings/<pairing-name>/pair
 
 ---
 
-## Step 3: Detect co-evolving pairs
+## Detect co-evolving pairs
 
 For each element: if it has BOTH a `tests:` property AND an `impl:` property, mark it as a **co-evolving pair**.
 
@@ -105,7 +111,7 @@ Co-evolving pairs run as concurrent Ralph loops. The tests gate (Step 10) is enf
 
 ---
 
-## Step 4: Build task queue
+## Build task queue
 
 Construct a queue of (element, property-key) task tuples:
 - Elements in **unordered** AsciiDoc list (`*`) → add to parallel pool (fan out concurrently).
@@ -120,7 +126,7 @@ If the queue is empty after applying all filters, report `No tasks to run — al
 
 ---
 
-## Step 5: Reconstruct per-task state
+## Reconstruct per-task state
 
 For each task, derive the canonical branch name using the `branch-name` helper:
 
@@ -152,7 +158,7 @@ Also read `[task-state]` from the asset `.adoc` file for this task (the same fil
 
 ---
 
-## Step 6: Ralph loop kernel
+## Ralph loop kernel
 
 Run the following 12-step kernel for each task. For parallel tasks, fan them out using concurrent Agent tool calls. For serial tasks, execute one at a time.
 
@@ -367,7 +373,7 @@ On `needs-human` or `infra-fail`: emit ⚠ commit (no rollback, no attempt count
 
 ---
 
-## Step 7: Crash and resume recovery
+## Crash and resume recovery
 
 On startup (or with `--resume`), for each task with `status: running` in `[task-state]`:
 
@@ -382,7 +388,7 @@ For tasks with `status: ⊗` and no `↺` commit: complete the rollback commit b
 
 ---
 
-## Step 8: Context limit checkpoint
+## Context limit checkpoint
 
 After completing each task, estimate current context token usage. If usage is at or above 80% of the session limit:
 
@@ -397,7 +403,7 @@ After completing each task, estimate current context token usage. If usage is at
 
 ---
 
-## Step 9: Concurrency
+## Concurrency
 
 For parallel (unordered) tasks, fan out using concurrent Agent tool calls. All ref-mutating Git operations (commit, branch update, worktree add/remove) are serialized by you — do not commit to two branches simultaneously.
 
@@ -409,7 +415,7 @@ Proceed only if `Try-Status: pass`.
 
 ---
 
-## Step 10: Co-evolving pairs (tests + impl on the same element)
+## Co-evolving pairs (tests + impl on the same element)
 
 For each co-evolving pair, run `tests` and `impl` as independent concurrent Ralph loops. Before committing `●` on the `impl` branch, perform the **tests gate check** (pure Git — no external state):
 
@@ -444,7 +450,7 @@ Re-evaluation attempts are classified `cross-task-reeval` and do NOT count again
 
 ---
 
-## Step 11: Summary report
+## Summary report
 
 When all tasks are `●`:
 

@@ -11,10 +11,10 @@ Guided creation of a C4 AsciiDoc plan. Produces `index.adoc` and sibling asset `
 
 ## Output Format (apply to every response)
 
-Every response starts with a one-line status header, then the question or action:
+Every response starts with a one-line status header using the current task name and the native task counts, then the question or action:
 
 ```
-**Darwin New** — <Phase name> | <N>/<T> phases complete
+**<current task name>** [N done | 1 in progress | N open]
 ```
 
 Single-line acknowledgment before each new question: `Got it: <captured value>`
@@ -25,20 +25,31 @@ One question per turn. No verbose preamble. Use A/B/C choices where natural.
 
 ## Phases
 
-Use TaskCreate at startup — one task per phase:
+Use TaskCreate at startup — one task per phase, with these exact names:
 
-1. Project setup
-2. Level 1: Context — systems and actors
-3. Level 2: Containers — deployable units
-4. Level 3: Components — logical units (optional)
-5. Level 4: Assets — impl/tests/bdd stubs + pairing stubs
-6. Write files and handoff
+1. Explore existing plans
+2. Gather project details
+3. Define context
+4. Define containers
+5. Define components
+6. Configure assets & pairings
+7. Write files
 
 Mark each task completed immediately when the phase is done.
 
 ---
 
-## Phase 1: Project Setup
+## Explore existing plans
+
+Check for any `index.adoc` or `*.adoc` files already in the repo:
+```bash
+find . -name "index.adoc" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null
+```
+If any exist, show them and ask whether to start fresh or extend one.
+
+---
+
+## Gather project details
 
 Ask in sequence (one per turn):
 
@@ -51,7 +62,7 @@ Write nothing to disk yet.
 
 ---
 
-## Phase 2: Level 1 — Context
+## Define context
 
 Three questions (one per turn):
 
@@ -75,7 +86,7 @@ Collect name + description for each.
 After all three, show a text summary and ask to confirm:
 
 ```
-Level 1 — Context:
+Context:
   Systems:   <name> (<slug>)
   Actors:    <list or none>
   External:  <list or none>
@@ -87,7 +98,7 @@ Do not proceed until confirmed.
 
 ---
 
-## Phase 3: Level 2 — Containers
+## Define containers
 
 For each software system, ask: "What are the **deployable units** inside `<System>`? List them (e.g. 'REST API, Background Worker, PostgreSQL DB') — or say 'single' to treat the system as an atomic unit."
 
@@ -100,7 +111,7 @@ For each container collect (one turn each):
 Show summary after all containers for a system:
 
 ```
-Level 2 — Containers in <System>:
+Containers in <System>:
   <slug>   <Name> — <description>
   ...
 
@@ -109,7 +120,7 @@ Confirm? (yes / revise)
 
 ---
 
-## Phase 4: Level 3 — Components
+## Define components
 
 For each container that is not a database/queue/external system, ask:
 "Does `<Container>` need to be decomposed into logical components? (e.g. 'UserService, AuthMiddleware, UserRepository')
@@ -122,7 +133,7 @@ Show summary, confirm. It is fine for all containers to be atomic.
 
 ---
 
-## Phase 5: Level 4 — Assets
+## Configure assets & pairings
 
 For each **implementable element** (components, or atomic containers — not databases, queues, or external services), determine which assets to create.
 
@@ -146,7 +157,7 @@ For option B, ask the pairing name for each element that has an impl asset.
 
 ---
 
-## Phase 6: Write Files and Handoff
+## Write files
 
 Build all file content in memory, then write to disk in one pass.
 

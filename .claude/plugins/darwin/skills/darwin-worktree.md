@@ -307,6 +307,7 @@ git -C "$WORKTREE_PATH" commit --allow-empty -m \
   --trailer "Failure-Class: <class>" \
   --trailer "Problem: <problem>" \
   --trailer "Hypothesis: <hypothesis>" \
+  --trailer "Evidence: <evidence-from-eval-envelope>" \
   --trailer "Agent-Input-Tokens: <agent_input>" \
   --trailer "Agent-Output-Tokens: <agent_output>" \
   --trailer "Agent-Thinking-Tokens: <agent_thinking>" \
@@ -347,6 +348,7 @@ On startup (or with `--resume`), for each task with `status: running` in `[task-
 | Yes | — | Do NOT re-spawn. Read signal; snapshot staged diff; run eval pipeline; commit result. |
 | No | Yes | Run eval pipeline on staged diff; commit result. |
 | No | No | Discard worktree (`git worktree remove --force`); reset `[task-state]` to `status: ◌`; schedule retry at same tier. |
+| `⊖` / dirty at `↺` | — | Block. Require manual repair. Do not auto-resolve. Surface: "Worktree dirty at rollback commit on `<branch>`. Manual intervention required (R8.3)." |
 
 For tasks with `status: ⊗` and no `↺` commit: complete the rollback commit before retrying.
 
@@ -404,7 +406,7 @@ Attempt <N>: <problem>
   evidence: <evidence>
 ```
 
-Re-evaluation model tier: tests agent starts one tier ABOVE entry (not entry). Cross-task rubric judge is always `judge_model: top` (highest ladder tier), regardless of the tests agent's tier.
+Re-evaluation model tier: for cross-task re-eval attempts only, the tests agent starts one tier ABOVE its configured entry tier. This does NOT apply to the tests task's own initial attempts, which start at entry tier and escalate on failure per the standard circuit breaker logic. Cross-task rubric judge is always `judge_model: top` (highest ladder tier), regardless of the tests agent's tier.
 
 Top-tier judge findings propagate bidirectionally:
 - **Tests experience brief** receives: coverage gaps identified.
@@ -431,6 +433,14 @@ Total tokens (this session):
 ```
 
 If any task is `⊖` (HANDOFF):
-1. Write `HANDOFF.md` in the project root with: task slug, attempt count, final failure class, problem, hypothesis, evidence, suggested next steps.
+1. Write `HANDOFF.md` in the project root with the following sections:
+   - **Header:** task slug, pairing name, branch, last commit SHA, models used across all attempts
+   - **Trigger:** trigger reason (one of: circuit-breaker exhausted / ladder exhausted / needs-human / upstream-constraint with upstream slug)
+   - **What this task was trying to do:** the original task description from the asset `.adoc`
+   - **Attempts summary table:** for each attempt — attempt #, tier, model, triggering eval ID, eval type, failure class, problem
+   - **Current hypothesis:** the hypothesis from the final `⊗` commit
+   - **Evidence:** the evidence from the final `⊗` commit
+   - **Unblocking options:** ordered list of concrete next steps for a human to try
+   - **Resume command:** `/darwin-worktree <plan.adoc> --resume <slug>`
 2. Print: "HANDOFF generated for <slug>. Review HANDOFF.md. Re-invoke /darwin-worktree --resume <slug> after addressing the issue."
 3. Stop.

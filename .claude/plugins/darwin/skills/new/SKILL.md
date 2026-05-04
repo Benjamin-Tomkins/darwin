@@ -1,11 +1,11 @@
 ---
-name: darwin-new
-description: Guided C4 model builder — walks through the big picture, applications & services, and internal structure, producing AsciiDoc files ready for /darwin-worktree. Use when starting a new project from scratch.
+name: new
+description: Guided C4 model builder — walks through the big picture, applications & services, and internal structure, producing AsciiDoc files ready for /darwin:worktree. Use when starting a new project from scratch.
 ---
 
-# /darwin-new
+# /darwin:new
 
-Guided creation of a C4 AsciiDoc plan. Produces `index.adoc` and sibling asset `.adoc` files ready for `/darwin-worktree`.
+Guided creation of a C4 AsciiDoc plan. Produces `index.adoc` and sibling asset `.adoc` files ready for `/darwin:worktree`.
 
 You are guiding the user through a structured architectural conversation. They may not know C4 terminology — use plain professional language throughout. Map their answers to C4 internally (softwareSystem, container, component) without exposing those terms unless the user is already comfortable with C4.
 
@@ -327,10 +327,10 @@ Written:
 Next steps:
   1. Fill in the TODO sections in each task file — describe what should be built
   2. Update each pairing.yaml with real agent instructions and eval commands
-  3. Run /darwin-worktree to start the implementation loop
+  3. Run /darwin:worktree to start the implementation loop
 ```
 
-Do NOT run /darwin-worktree automatically.
+Do NOT run /darwin:worktree automatically.
 
 ---
 
@@ -351,6 +351,6 @@ Always show the derived slug and confirm before using it.
 
 ## Stopping and Resuming
 
-If the user says "stop" or "save progress" at any phase boundary, write `.darwin-new-state.json` to the plan directory capturing all answers so far. Tell the user to run `/darwin-new --resume <plan-dir>` to continue.
+If the user says "stop" or "save progress" at any phase boundary, write `.new-state.json` to the plan directory capturing all answers so far. Tell the user to run `/darwin:new --resume <plan-dir>` to continue.
 
-If invoked with `--resume <plan-dir>`, read `.darwin-new-state.json`, show a one-line summary of what was captured, and continue from the last incomplete phase.
+If invoked with `--resume <plan-dir>`, read `.new-state.json`, show a one-line summary of what was captured, and continue from the last incomplete phase.

@@ -1,9 +1,9 @@
 ---
-name: darwin-worktree
-description: Drives the Darwin Ralph loop controller, executing plan tasks via self-healing agent/eval pairs with automatic retry and circuit breakers. Use when running /darwin-worktree on a C4 plan or AsciiDoc plan file, resuming after a HANDOFF, or orchestrating the Ralph loop for implementation tasks.
+name: worktree
+description: Drives the Darwin Ralph loop controller, executing plan tasks via self-healing agent/eval pairs with automatic retry and circuit breakers. Use when running /darwin:worktree on a C4 plan or AsciiDoc plan file, resuming after a HANDOFF, or orchestrating the Ralph loop for implementation tasks.
 ---
 
-# /darwin-worktree
+# /darwin:worktree
 
 You are the Ralph loop controller. Drive the loop to completion for all tasks in the plan. Do not delegate decisions to the agent or to evaluators. You own the loop.
 
@@ -30,7 +30,7 @@ ls .claude/darwin-pairings/*/pairing.yaml 2>/dev/null || echo "(none)"
 
 For each `pairing.yaml` found:
 
-1. **Required fields.** Check `name`, `agent`, and `evals` are present at the top level. If any are missing, halt: "Pairing `<filename>`: missing required field(s): `<list>`. Fix before running /darwin-worktree."
+1. **Required fields.** Check `name`, `agent`, and `evals` are present at the top level. If any are missing, halt: "Pairing `<filename>`: missing required field(s): `<list>`. Fix before running /darwin:worktree."
 
 2. **Judge-model separation.** For each eval with `type: rubric`, the `judge_model` value must NOT appear in any `ladder[].model` in `~/.claude/escalation-ladder.json`. If it does, halt: "Pairing `<name>`: judge-model separation violation — `judge_model` '<model>' appears in escalation ladder (R7.2)."
 
@@ -41,9 +41,9 @@ For each `pairing.yaml` found:
 ## Usage
 
 ```
-/darwin-worktree <plan.adoc> [--base <ref>] [--resume <slug>]
-/darwin-worktree --c4 <plan-dir> [--base <ref>] [--resume <slug>]
-/darwin-worktree --resume <slug>
+/darwin:worktree <plan.adoc> [--base <ref>] [--resume <slug>]
+/darwin:worktree --c4 <plan-dir> [--base <ref>] [--resume <slug>]
+/darwin:worktree --resume <slug>
 ```
 
 - `<plan.adoc>` — path to an AsciiDoc plan file, or a directory containing `index.adoc`.
@@ -395,7 +395,7 @@ After completing each task, estimate current context token usage. If usage is at
 1. For every task still `status: running`, flush `[task-state]` to the plan `.adoc` and commit.
 2. Print:
    ```
-   Context limit approaching. Re-invoke /darwin-worktree to continue.
+   Context limit approaching. Re-invoke /darwin:worktree to continue.
    Completed tasks: <list of ● slugs>
    Remaining tasks: <list of pending slugs>
    ```
@@ -475,6 +475,6 @@ If any task is `⊖` (HANDOFF):
    - **Current hypothesis:** the hypothesis from the final `⊗` commit
    - **Evidence:** the evidence from the final `⊗` commit
    - **Unblocking options:** ordered list of concrete next steps for a human to try
-   - **Resume command:** `/darwin-worktree <plan.adoc> --resume <slug>`
-2. Print: "HANDOFF generated for <slug>. Review HANDOFF.md. Re-invoke /darwin-worktree --resume <slug> after addressing the issue."
+   - **Resume command:** `/darwin:worktree <plan.adoc> --resume <slug>`
+2. Print: "HANDOFF generated for <slug>. Review HANDOFF.md. Re-invoke /darwin:worktree --resume <slug> after addressing the issue."
 3. Stop.

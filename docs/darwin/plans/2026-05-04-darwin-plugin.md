@@ -40,16 +40,18 @@ Note: the C4 adapter plan may put runtime scripts in `scripts/` rather than `hel
 
 ## Task 0: Plugin directory structure and hooks manifest
 
-Creates the `hooks/`, `skills/`, and `helpers/c4/` directories and registers the two hooks.
+Creates the `hooks/`, `skills/`, and `helpers/c4/` directories, the plugin manifest, and the hooks registration file.
 
 **Files:**
+- Create: `.claude/plugins/darwin/.claude-plugin/plugin.json`
 - Create: `.claude/plugins/darwin/hooks/hooks.json`
-- Create: `.claude/plugins/darwin/hooks/tests/` (directory)
-- Create: `.claude/plugins/darwin/skills/` (directory)
+- Create: `.claude/plugins/darwin/hooks/tests/.gitkeep`
+- Create: `.claude/plugins/darwin/skills/.gitkeep`
 
 - [ ] **Step 1: Create directory tree**
 
 ```bash
+mkdir -p .claude/plugins/darwin/.claude-plugin
 mkdir -p .claude/plugins/darwin/hooks/tests
 mkdir -p .claude/plugins/darwin/skills
 mkdir -p .claude/plugins/darwin/helpers/c4/src
@@ -58,7 +60,7 @@ mkdir -p .claude/plugins/darwin/helpers/c4/tests
 ```
 
 Run: `ls .claude/plugins/darwin/`
-Expected: `hooks/  helpers/  skills/` directories present.
+Expected: `.claude-plugin/  hooks/  helpers/  skills/` directories present.
 
 - [ ] **Step 2: Verify `.gitignore` allows the plugin**
 
@@ -66,34 +68,37 @@ Expected: `hooks/  helpers/  skills/` directories present.
 git check-ignore -v .claude/plugins/darwin/hooks/hooks.json
 ```
 
-Expected: no output (file is NOT ignored). If it is ignored, check that `.gitignore` contains the negation rules:
+Expected: no output (file is NOT ignored). If it is ignored, add the negation rules to `.gitignore`.
 
-```gitignore
-!.claude/plugins/
-!.claude/plugins/darwin/
-!.claude/plugins/darwin/**
-```
+- [ ] **Step 3: Create `.claude-plugin/plugin.json`**
 
-Add them if missing:
-```bash
-cat >> .gitignore <<'EOF'
-!.claude/plugins/
-!.claude/plugins/darwin/
-!.claude/plugins/darwin/**
-EOF
-```
-
-- [ ] **Step 3: Create `hooks/hooks.json`**
+Claude Code reads this to load the plugin and set `CLAUDE_PLUGIN_ROOT`. Without it, `${CLAUDE_PLUGIN_ROOT}` in hook commands expands to empty string.
 
 ```json
 {
+  "name": "darwin",
+  "description": "Darwin — the Ralph loop controller plugin. Drives self-healing AI agent loops via skills, hooks, and TypeScript helpers.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Benjamin Tomkins"
+  }
+}
+```
+
+- [ ] **Step 4: Create `hooks/hooks.json`**
+
+Use `bash "..."` pattern (consistent with all installed plugins — do NOT quote just the path without `bash`).
+
+```json
+{
+  "description": "WorktreeCreate and SubagentStop hooks for the Darwin Ralph loop controller",
   "hooks": {
     "WorktreeCreate": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.sh\"",
             "async": false
           }
         ]
@@ -104,7 +109,7 @@ EOF
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.sh\"",
             "async": false
           }
         ]
@@ -114,15 +119,34 @@ EOF
 }
 ```
 
-Run: `cat .claude/plugins/darwin/hooks/hooks.json | jq .`
-Expected: Valid JSON with WorktreeCreate and SubagentStop keys.
+**Note:** `async: false` is required for `SubagentStop` — if the hook fires asynchronously, the controller may read a missing `signal.json`. Verify at implementation time that `async: false` means "block until hook completes" for these hook types.
 
-- [ ] **Step 4: Commit**
+Run: `cat .claude/plugins/darwin/hooks/hooks.json | jq .`
+Expected: Valid JSON with description, WorktreeCreate, and SubagentStop keys.
+
+- [ ] **Step 5: Add `.gitkeep` to empty directories**
+
+Git does not track empty directories. Any empty dirs that won't receive files in this commit need a `.gitkeep`.
 
 ```bash
-git add .gitignore .claude/plugins/darwin/hooks/hooks.json
-git commit -m "feat(darwin): plugin directory structure, gitignore, and hook manifest"
+touch .claude/plugins/darwin/skills/.gitkeep
+touch .claude/plugins/darwin/hooks/tests/.gitkeep
 ```
+
+(`helpers/c4/src/`, `helpers/c4/bin/`, `helpers/c4/tests/` receive files in Task 1.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .claude/plugins/darwin/
+git commit -m "feat(darwin): plugin manifest, directory structure, and hook manifest"
+```
+
+**Post-setup (once, per developer):** After this commit, register the plugin so Claude Code sets `CLAUDE_PLUGIN_ROOT`:
+```bash
+claude plugin install --local .claude/plugins/darwin
+```
+This adds the plugin to `~/.claude/plugins/installed_plugins.json` with `scope: "project"`. Verify with `claude plugin list`.
 
 ---
 

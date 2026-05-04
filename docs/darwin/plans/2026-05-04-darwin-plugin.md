@@ -4,18 +4,20 @@
 
 **Goal:** Build the Darwin Claude Code plugin — the hooks, `token-delta` helper, and skill files that turn a Claude Code session into the Ralph loop controller.
 
-**Architecture:** The plugin lives at `~/.claude/plugins/darwin/`. Shell hooks (WorktreeCreate, SubagentStop) handle worktree creation and signal writing. The `token-delta` TypeScript helper computes token deltas between snapshots. Two markdown skill files (`darwin-init.md`, `darwin-worktree.md`) contain the natural-language instructions Claude Code follows as the controller. No daemon, no SDK loop — Claude Code is the controller.
+**Architecture:** The plugin lives at `.claude/plugins/darwin/`. Shell hooks (WorktreeCreate, SubagentStop) handle worktree creation and signal writing. The `token-delta` TypeScript helper computes token deltas between snapshots. Two markdown skill files (`darwin-init.md`, `darwin-worktree.md`) contain the natural-language instructions Claude Code follows as the controller. No daemon, no SDK loop — Claude Code is the controller.
 
 **Tech Stack:** Bash (hooks, scripts), TypeScript/ESM (token-delta helper; compiled by the same build config as the C4 adapter), vitest 2.x for TS tests, plain shell assertions for hook tests. macOS: Seatbelt sandbox. Linux/WSL2: bubblewrap.
 
-**Prerequisite:** The C4 adapter plan (`docs/darwin/plans/2026-05-03-r14-c4-adapter.md`) must be completed first. It creates `package.json`, `tsconfig.json`, `vitest.config.ts`, `scripts/detect-runtime.sh`, `scripts/rt.sh`, and the five TypeScript helpers. Before starting this plan, verify:
+**Plugin location:** `.claude/plugins/darwin/` inside this repo — committed to git. All commands in this plan run from the repo root unless a step explicitly `cd`s into the plugin directory for a build/test invocation.
+
+**Prerequisite:** The C4 adapter plan (`docs/darwin/plans/2026-05-03-r14-c4-adapter.md`) must be completed first. It creates `package.json`, `tsconfig.json`, `vitest.config.ts`, `helpers/c4/detect-runtime.sh`, `helpers/c4/rt.sh`, and the five TypeScript helpers inside `.claude/plugins/darwin/`. Before starting this plan, verify:
 
 ```bash
-ls ~/.claude/plugins/darwin/bin/parse-index.js   # C4 adapter output
-ls ~/.claude/darwin-state/runtime.json            # detect-runtime.sh output
+ls .claude/plugins/darwin/helpers/c4/bin/parse-index.js   # C4 adapter output
+ls ~/.claude/darwin-state/runtime.json                     # detect-runtime.sh output
 ```
 
-Note: the C4 adapter plan puts runtime scripts in `scripts/`; the design spec places them in `helpers/c4/`. Either location works as long as the `darwin-worktree.md` skill references the correct paths. This plan uses `helpers/c4/` per the design spec; adjust if you kept `scripts/`.
+Note: the C4 adapter plan may put runtime scripts in `scripts/` rather than `helpers/c4/`. Either location works as long as the `darwin-worktree.md` skill references the correct paths. This plan uses `helpers/c4/` per the design spec; adjust if you kept `scripts/`.
 
 ---
 
@@ -23,16 +25,16 @@ Note: the C4 adapter plan puts runtime scripts in `scripts/`; the design spec pl
 
 | File | Status | Responsibility |
 |------|--------|----------------|
-| `~/.claude/plugins/darwin/hooks/hooks.json` | Create | Registers WorktreeCreate + SubagentStop hooks |
-| `~/.claude/plugins/darwin/hooks/worktree-create.sh` | Create | Reads manifest; creates sparse worktree; injects `.claude/`; marks skip-worktree |
-| `~/.claude/plugins/darwin/hooks/subagent-stop.sh` | Create | Reads transcript; extracts token usage; writes signal.json |
-| `~/.claude/plugins/darwin/hooks/tests/worktree-create.test.sh` | Create | Shell assertions for worktree-create.sh |
-| `~/.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh` | Create | Shell assertions for subagent-stop.sh |
-| `~/.claude/plugins/darwin/helpers/c4/src/token-delta.ts` | Create | Pure delta function + CLI entry point |
-| `~/.claude/plugins/darwin/helpers/c4/tests/token-delta.test.ts` | Create | vitest unit tests |
-| `~/.claude/plugins/darwin/helpers/c4/bin/token-delta.js` | Compiled | Output of `tsc` build |
-| `~/.claude/plugins/darwin/skills/darwin-init.md` | Create | `/darwin-init` skill — runtime detection, gitignore, pairing validation |
-| `~/.claude/plugins/darwin/skills/darwin-worktree.md` | Create | `/darwin-worktree` skill — full Ralph loop controller |
+| `.claude/plugins/darwin/hooks/hooks.json` | Create | Registers WorktreeCreate + SubagentStop hooks |
+| `.claude/plugins/darwin/hooks/worktree-create.sh` | Create | Reads manifest; creates sparse worktree; injects `.claude/`; marks skip-worktree |
+| `.claude/plugins/darwin/hooks/subagent-stop.sh` | Create | Reads transcript; extracts token usage; writes signal.json |
+| `.claude/plugins/darwin/hooks/tests/worktree-create.test.sh` | Create | Shell assertions for worktree-create.sh |
+| `.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh` | Create | Shell assertions for subagent-stop.sh |
+| `.claude/plugins/darwin/helpers/c4/src/token-delta.ts` | Create | Pure delta function + CLI entry point |
+| `.claude/plugins/darwin/helpers/c4/tests/token-delta.test.ts` | Create | vitest unit tests |
+| `.claude/plugins/darwin/helpers/c4/bin/token-delta.js` | Compiled | Output of `tsc` build |
+| `.claude/plugins/darwin/skills/darwin-init.md` | Create | `/darwin-init` skill — runtime detection, gitignore, pairing validation |
+| `.claude/plugins/darwin/skills/darwin-worktree.md` | Create | `/darwin-worktree` skill — full Ralph loop controller |
 
 ---
 
@@ -41,25 +43,47 @@ Note: the C4 adapter plan puts runtime scripts in `scripts/`; the design spec pl
 Creates the `hooks/`, `skills/`, and `helpers/c4/` directories and registers the two hooks.
 
 **Files:**
-- Create: `~/.claude/plugins/darwin/hooks/hooks.json`
-- Create: `~/.claude/plugins/darwin/hooks/tests/` (directory)
-- Create: `~/.claude/plugins/darwin/skills/` (directory)
+- Create: `.claude/plugins/darwin/hooks/hooks.json`
+- Create: `.claude/plugins/darwin/hooks/tests/` (directory)
+- Create: `.claude/plugins/darwin/skills/` (directory)
 
 - [ ] **Step 1: Create directory tree**
 
 ```bash
-PLUGIN="$HOME/.claude/plugins/darwin"
-mkdir -p "$PLUGIN/hooks/tests"
-mkdir -p "$PLUGIN/skills"
-mkdir -p "$PLUGIN/helpers/c4/src"
-mkdir -p "$PLUGIN/helpers/c4/bin"
-mkdir -p "$PLUGIN/helpers/c4/tests"
+mkdir -p .claude/plugins/darwin/hooks/tests
+mkdir -p .claude/plugins/darwin/skills
+mkdir -p .claude/plugins/darwin/helpers/c4/src
+mkdir -p .claude/plugins/darwin/helpers/c4/bin
+mkdir -p .claude/plugins/darwin/helpers/c4/tests
 ```
 
-Run: `ls ~/.claude/plugins/darwin/`
+Run: `ls .claude/plugins/darwin/`
 Expected: `hooks/  helpers/  skills/` directories present.
 
-- [ ] **Step 2: Create `hooks/hooks.json`**
+- [ ] **Step 2: Verify `.gitignore` allows the plugin**
+
+```bash
+git check-ignore -v .claude/plugins/darwin/hooks/hooks.json
+```
+
+Expected: no output (file is NOT ignored). If it is ignored, check that `.gitignore` contains the negation rules:
+
+```gitignore
+!.claude/plugins/
+!.claude/plugins/darwin/
+!.claude/plugins/darwin/**
+```
+
+Add them if missing:
+```bash
+cat >> .gitignore <<'EOF'
+!.claude/plugins/
+!.claude/plugins/darwin/
+!.claude/plugins/darwin/**
+EOF
+```
+
+- [ ] **Step 3: Create `hooks/hooks.json`**
 
 ```json
 {
@@ -90,15 +114,14 @@ Expected: `hooks/  helpers/  skills/` directories present.
 }
 ```
 
-Run: `cat ~/.claude/plugins/darwin/hooks/hooks.json | jq .`
+Run: `cat .claude/plugins/darwin/hooks/hooks.json | jq .`
 Expected: Valid JSON with WorktreeCreate and SubagentStop keys.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add hooks/hooks.json
-git commit -m "feat(darwin): plugin directory structure and hook manifest"
+git add .gitignore .claude/plugins/darwin/hooks/hooks.json
+git commit -m "feat(darwin): plugin directory structure, gitignore, and hook manifest"
 ```
 
 ---
@@ -108,14 +131,14 @@ git commit -m "feat(darwin): plugin directory structure and hook manifest"
 A pure-function CLI that computes the difference between two token snapshots. Used by the controller to quantify the cost of each attempt node.
 
 **Files:**
-- Create: `~/.claude/plugins/darwin/helpers/c4/src/token-delta.ts`
-- Create: `~/.claude/plugins/darwin/helpers/c4/tests/token-delta.test.ts`
-- Compiled: `~/.claude/plugins/darwin/helpers/c4/bin/token-delta.js`
+- Create: `.claude/plugins/darwin/helpers/c4/src/token-delta.ts`
+- Create: `.claude/plugins/darwin/helpers/c4/tests/token-delta.test.ts`
+- Compiled: `.claude/plugins/darwin/helpers/c4/bin/token-delta.js`
 
 - [ ] **Step 1: Write the failing tests**
 
 ```typescript
-// ~/.claude/plugins/darwin/helpers/c4/tests/token-delta.test.ts
+// .claude/plugins/darwin/helpers/c4/tests/token-delta.test.ts
 import { describe, it, expect } from 'vitest';
 import { computeDelta } from '../src/token-delta.js';
 
@@ -158,7 +181,7 @@ describe('computeDelta', () => {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd ~/.claude/plugins/darwin
+cd .claude/plugins/darwin
 ./helpers/c4/rt.sh test helpers/c4/tests/token-delta.test.ts
 ```
 
@@ -167,7 +190,7 @@ Expected: FAIL — `Cannot find module '../src/token-delta.js'`
 - [ ] **Step 3: Write the implementation**
 
 ```typescript
-// ~/.claude/plugins/darwin/helpers/c4/src/token-delta.ts
+// .claude/plugins/darwin/helpers/c4/src/token-delta.ts
 export interface TokenSnapshot {
   input: number;
   output: number;
@@ -202,7 +225,7 @@ process.stdin.on('end', () => {
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd ~/.claude/plugins/darwin
+cd .claude/plugins/darwin
 ./helpers/c4/rt.sh test helpers/c4/tests/token-delta.test.ts
 ```
 
@@ -211,7 +234,7 @@ Expected: PASS — 4 tests passing.
 - [ ] **Step 5: Verify the CLI works end-to-end**
 
 ```bash
-cd ~/.claude/plugins/darwin
+cd .claude/plugins/darwin
 ./helpers/c4/rt.sh run build   # compiles all src/ to bin/
 echo '[{"input":1000,"output":200,"thinking":0},{"input":3500,"output":800,"thinking":500}]' \
   | node helpers/c4/bin/token-delta.js
@@ -222,8 +245,9 @@ Expected: `{"input_delta":2500,"output_delta":600,"thinking_delta":500}`
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add helpers/c4/src/token-delta.ts helpers/c4/tests/token-delta.test.ts helpers/c4/bin/token-delta.js
+git add .claude/plugins/darwin/helpers/c4/src/token-delta.ts \
+        .claude/plugins/darwin/helpers/c4/tests/token-delta.test.ts \
+        .claude/plugins/darwin/helpers/c4/bin/token-delta.js
 git commit -m "feat(darwin): token-delta helper — compute per-attempt token cost delta"
 ```
 
@@ -234,8 +258,8 @@ git commit -m "feat(darwin): token-delta helper — compute per-attempt token co
 Reads the subagent's transcript, sums token usage across all API turns, and writes `signal.json` so the controller can read agent token counts after the subagent completes.
 
 **Files:**
-- Create: `~/.claude/plugins/darwin/hooks/subagent-stop.sh`
-- Create: `~/.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh`
+- Create: `.claude/plugins/darwin/hooks/subagent-stop.sh`
+- Create: `.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh`
 
 **Context:** Claude Code calls this hook when a subagent session ends. It receives JSON on stdin including `cwd` (the worktree path) and `transcript_path` (path to the session transcript JSONL). The transcript format is JSONL — each line is a JSON object; API response turns carry a `usage` key with `input_tokens`, `output_tokens`, and optionally `thinking_tokens`.
 
@@ -305,14 +329,14 @@ echo "subagent-stop: signal written to $SIGNAL_DIR/signal.json" >&2
 ```
 
 ```bash
-chmod +x ~/.claude/plugins/darwin/hooks/subagent-stop.sh
+chmod +x .claude/plugins/darwin/hooks/subagent-stop.sh
 ```
 
 - [ ] **Step 2: Create shell test with a mock transcript**
 
 ```bash
 #!/usr/bin/env bash
-# ~/.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
+# .claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -371,13 +395,13 @@ echo "PASS: subagent-stop.sh"
 ```
 
 ```bash
-chmod +x ~/.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
+chmod +x .claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
 ```
 
 - [ ] **Step 3: Run the test**
 
 ```bash
-bash ~/.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
+bash .claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
 ```
 
 Expected: `PASS: subagent-stop.sh`
@@ -387,7 +411,7 @@ Expected: `PASS: subagent-stop.sh`
 ```bash
 INPUT=$(jq -n --arg cwd "$HOME/.claude/darwin-worktrees/norepo/notask" '{cwd: $cwd}')
 mkdir -p "$HOME/.claude/darwin-worktrees/norepo/notask"
-printf '%s' "$INPUT" | bash ~/.claude/plugins/darwin/hooks/subagent-stop.sh
+printf '%s' "$INPUT" | bash .claude/plugins/darwin/hooks/subagent-stop.sh
 cat "$HOME/.claude/darwin-state/norepo/notask/signal.json"
 ```
 
@@ -401,8 +425,8 @@ rm -rf "$HOME/.claude/darwin-state/norepo" "$HOME/.claude/darwin-worktrees/norep
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add hooks/subagent-stop.sh hooks/tests/subagent-stop.test.sh
+git add .claude/plugins/darwin/hooks/subagent-stop.sh \
+        .claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
 git commit -m "feat(darwin): SubagentStop hook — transcript token extraction + signal.json"
 ```
 
@@ -413,8 +437,8 @@ git commit -m "feat(darwin): SubagentStop hook — transcript token extraction +
 Creates the sparse worktree, injects `.claude/` contents from the pairing's agent template, and marks injected files as `skip-worktree`. Reads a manifest written by the controller before the hook fires.
 
 **Files:**
-- Create: `~/.claude/plugins/darwin/hooks/worktree-create.sh`
-- Create: `~/.claude/plugins/darwin/hooks/tests/worktree-create.test.sh`
+- Create: `.claude/plugins/darwin/hooks/worktree-create.sh`
+- Create: `.claude/plugins/darwin/hooks/tests/worktree-create.test.sh`
 
 **Context:** The controller writes `~/.claude/darwin-state/<repo-hash>/<task-slug>/manifest.json` before calling the Agent tool (which triggers WorktreeCreate). The hook receives JSON on stdin from Claude Code — at minimum a `path` field containing the planned worktree path. Implementation note: verify the exact stdin field name at implementation time against the Claude Code hook documentation; adjust `jq` path if it differs (e.g., `.worktree_path`, `.name`).
 
@@ -522,14 +546,14 @@ echo "$WORKTREE_PATH"
 ```
 
 ```bash
-chmod +x ~/.claude/plugins/darwin/hooks/worktree-create.sh
+chmod +x .claude/plugins/darwin/hooks/worktree-create.sh
 ```
 
 - [ ] **Step 2: Create shell test**
 
 ```bash
 #!/usr/bin/env bash
-# ~/.claude/plugins/darwin/hooks/tests/worktree-create.test.sh
+# .claude/plugins/darwin/hooks/tests/worktree-create.test.sh
 # Tests hook behaviour with a real (temp) git repo.
 set -euo pipefail
 
@@ -603,13 +627,13 @@ echo "PASS: worktree-create.sh"
 ```
 
 ```bash
-chmod +x ~/.claude/plugins/darwin/hooks/tests/worktree-create.test.sh
+chmod +x .claude/plugins/darwin/hooks/tests/worktree-create.test.sh
 ```
 
 - [ ] **Step 3: Run the test**
 
 ```bash
-bash ~/.claude/plugins/darwin/hooks/tests/worktree-create.test.sh
+bash .claude/plugins/darwin/hooks/tests/worktree-create.test.sh
 ```
 
 Expected: `PASS: worktree-create.sh`
@@ -617,8 +641,8 @@ Expected: `PASS: worktree-create.sh`
 - [ ] **Step 4: Commit**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add hooks/worktree-create.sh hooks/tests/worktree-create.test.sh
+git add .claude/plugins/darwin/hooks/worktree-create.sh \
+        .claude/plugins/darwin/hooks/tests/worktree-create.test.sh
 git commit -m "feat(darwin): WorktreeCreate hook — sparse worktree + .claude/ injection"
 ```
 
@@ -629,7 +653,7 @@ git commit -m "feat(darwin): WorktreeCreate hook — sparse worktree + .claude/ 
 The `/darwin-init` skill runs once per project. It detects the JS runtime, seeds `.gitignore`, validates pairings, and checks the escalation ladder.
 
 **Files:**
-- Create: `~/.claude/plugins/darwin/skills/darwin-init.md`
+- Create: `.claude/plugins/darwin/skills/darwin-init.md`
 
 - [ ] **Step 1: Write `skills/darwin-init.md`**
 
@@ -640,11 +664,19 @@ Initialize a project for use with Darwin. Follow these steps in order. Stop and 
 
 ---
 
+## Preamble
+
+```bash
+PLUGIN="$(git rev-parse --show-toplevel)/.claude/plugins/darwin"
+```
+
+---
+
 ## Step 1: Detect JS runtime
 
 Run:
 ```bash
-bash ~/.claude/plugins/darwin/helpers/c4/detect-runtime.sh
+bash "$PLUGIN/helpers/c4/detect-runtime.sh"
 ```
 
 If the script fails or exits non-zero, stop and report: "No supported JS runtime found. Install Bun, Node.js 20+, or Deno before running /darwin-init."
@@ -740,8 +772,7 @@ Read `docs/darwin/specs/2026-05-04-darwin-plugin-design.md` Section 2 (`/darwin-
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add skills/darwin-init.md
+git add .claude/plugins/darwin/skills/darwin-init.md
 git commit -m "feat(darwin): darwin-init skill — runtime detection, pairing validation"
 ```
 
@@ -752,7 +783,7 @@ git commit -m "feat(darwin): darwin-init skill — runtime detection, pairing va
 The `/darwin-worktree` skill is the main Ralph loop controller. This task writes its first half: argument parsing, plan parsing, asset loading, co-evolving pair detection, task queue construction, and per-task state reconstruction from Git.
 
 **Files:**
-- Create: `~/.claude/plugins/darwin/skills/darwin-worktree.md` (this task: preamble through state reconstruction)
+- Create: `.claude/plugins/darwin/skills/darwin-worktree.md` (this task: preamble through state reconstruction)
 
 - [ ] **Step 1: Write the preamble and entry section of `skills/darwin-worktree.md`**
 
@@ -793,7 +824,7 @@ Set shell variables:
 ```bash
 EXEC=$(jq -r '.exec' ~/.claude/darwin-state/runtime.json)
 FLAGS=$(jq -r '.run_flags // [] | join(" ")' ~/.claude/darwin-state/runtime.json)
-PLUGIN="$HOME/.claude/plugins/darwin"
+PLUGIN="$(git rev-parse --show-toplevel)/.claude/plugins/darwin"
 ```
 
 Parse `index.adoc` into an element tree:
@@ -873,8 +904,7 @@ Read `docs/darwin/specs/2026-05-04-darwin-plugin-design.md` Section 5 (Ralph Loo
 - [ ] **Step 3: Commit checkpoint**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add skills/darwin-worktree.md
+git add .claude/plugins/darwin/skills/darwin-worktree.md
 git commit -m "feat(darwin): darwin-worktree skill — entry, plan parsing, task queue, state reconstruction"
 ```
 
@@ -885,7 +915,7 @@ git commit -m "feat(darwin): darwin-worktree skill — entry, plan parsing, task
 Appends the Ralph loop's inner mechanics to `darwin-worktree.md`: the 12-step kernel, token tracking, how to commit ⊗/● with trailers, crash/resume recovery, the 80% context checkpoint, and co-evolving pair logic.
 
 **Files:**
-- Modify: `~/.claude/plugins/darwin/skills/darwin-worktree.md` (append remaining sections)
+- Modify: `.claude/plugins/darwin/skills/darwin-worktree.md` (append remaining sections)
 
 - [ ] **Step 1: Append the loop kernel section**
 
@@ -1230,8 +1260,7 @@ Fix any gaps found. Commit only when all boxes pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add skills/darwin-worktree.md
+git add .claude/plugins/darwin/skills/darwin-worktree.md
 git commit -m "feat(darwin): darwin-worktree skill — loop kernel, eval, commit, recovery, co-evolving pairs"
 ```
 
@@ -1246,7 +1275,7 @@ Verifies the full plugin assembles correctly: hooks.json is valid, all shell scr
 - [ ] **Step 1: Validate hooks.json**
 
 ```bash
-cat ~/.claude/plugins/darwin/hooks/hooks.json | jq .
+cat .claude/plugins/darwin/hooks/hooks.json | jq .
 ```
 
 Expected: valid JSON with `hooks.WorktreeCreate` and `hooks.SubagentStop` arrays.
@@ -1254,8 +1283,8 @@ Expected: valid JSON with `hooks.WorktreeCreate` and `hooks.SubagentStop` arrays
 - [ ] **Step 2: Verify shell scripts are executable**
 
 ```bash
-ls -la ~/.claude/plugins/darwin/hooks/worktree-create.sh \
-        ~/.claude/plugins/darwin/hooks/subagent-stop.sh
+ls -la .claude/plugins/darwin/hooks/worktree-create.sh \
+        .claude/plugins/darwin/hooks/subagent-stop.sh
 ```
 
 Expected: both show `-rwxr-xr-x` (or similar with execute bit set).
@@ -1263,8 +1292,8 @@ Expected: both show `-rwxr-xr-x` (or similar with execute bit set).
 - [ ] **Step 3: Run all shell tests**
 
 ```bash
-bash ~/.claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
-bash ~/.claude/plugins/darwin/hooks/tests/worktree-create.test.sh
+bash .claude/plugins/darwin/hooks/tests/subagent-stop.test.sh
+bash .claude/plugins/darwin/hooks/tests/worktree-create.test.sh
 ```
 
 Expected: both print `PASS`.
@@ -1272,7 +1301,7 @@ Expected: both print `PASS`.
 - [ ] **Step 4: Run TypeScript tests**
 
 ```bash
-cd ~/.claude/plugins/darwin
+cd .claude/plugins/darwin
 ./helpers/c4/rt.sh test
 ```
 
@@ -1281,7 +1310,7 @@ Expected: all tests pass (C4 adapter tests + token-delta tests).
 - [ ] **Step 5: Verify compiled helpers**
 
 ```bash
-ls ~/.claude/plugins/darwin/helpers/c4/bin/*.js
+ls .claude/plugins/darwin/helpers/c4/bin/*.js
 ```
 
 Expected: `parse-index.js  branch-name.js  format-trailers.js  validate-property.js  resolve-phase-transition.js  token-delta.js`
@@ -1289,10 +1318,10 @@ Expected: `parse-index.js  branch-name.js  format-trailers.js  validate-property
 - [ ] **Step 6: Spot-check skill file paths**
 
 ```bash
-grep "darwin-state/runtime.json"  ~/.claude/plugins/darwin/skills/darwin-init.md
-grep "detect-runtime.sh"          ~/.claude/plugins/darwin/skills/darwin-init.md
-grep "darwin-state/runtime.json"  ~/.claude/plugins/darwin/skills/darwin-worktree.md
-grep "token-delta"                ~/.claude/plugins/darwin/helpers/c4/bin/token-delta.js
+grep "darwin-state/runtime.json"  .claude/plugins/darwin/skills/darwin-init.md
+grep "detect-runtime.sh"          .claude/plugins/darwin/skills/darwin-init.md
+grep "darwin-state/runtime.json"  .claude/plugins/darwin/skills/darwin-worktree.md
+grep "token-delta"                .claude/plugins/darwin/helpers/c4/bin/token-delta.js
 ```
 
 Expected: each grep returns at least one match. If `helpers/c4/` paths are wrong (e.g., `scripts/` from the C4 adapter plan), update the skill files to match the actual installed location.
@@ -1300,9 +1329,8 @@ Expected: each grep returns at least one match. If `helpers/c4/` paths are wrong
 - [ ] **Step 7: Final commit**
 
 ```bash
-cd ~/.claude/plugins/darwin
-git add -A
-git status   # confirm nothing unexpected is staged
+git add .claude/plugins/darwin/
+git status   # confirm only plugin files are staged
 git commit -m "chore(darwin): integration smoke test pass — plugin complete"
 ```
 

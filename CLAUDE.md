@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Shape
 
-This repo is a **design specification project**, not an implementation. Two specs live here:
+This repo holds the **design specifications** and **plugin source** for Darwin — the Claude Code plugin that implements the Ralph loop controller. Three top-level artefacts:
 
 - `sparse-workflow.md` (~1850 lines) — the **controller spec**. The self-healing state machine for AI agent + evaluator pairs. Defines the `(agent, eval) → controller` Ralph loop, the eval contract, sandbox isolation, the trust model, and the full Requirements set (R0–R14).
 - `docs/darwin/specs/2026-05-03-c4-plan-format.adoc` (~700 lines) — the **plan-format spec**. The on-disk encoding the controller orchestrates: a single `index.adoc` with an embedded Structurizr DSL block holding the canonical C4 model, plus flat sibling `.adoc` files for human-readable detail (BDD, pseudo-code, implementation plans). C4 hierarchy lives in Git branch names, not folders.
+- `.claude/plugins/darwin/` — the **Darwin plugin source** (committed). Skills (`darwin-init.md`, `darwin-worktree.md`), hooks (`worktree-create.sh`, `subagent-stop.sh`), and TypeScript helpers (`helpers/c4/`). This is a development build; compiled `bin/*.js` artifacts are committed alongside source so no build step is required to run the plugin.
 
 The two specs are **tightly coupled** by design: the controller spec includes a dedicated **R14 — C4 plan format adapter** section codifying the controller's obligations when operating on the C4 format (DSL parsing, slug-based branch naming, `_index` suffix, single canonical index branch, property lifecycle, phase-transition mechanics, etc.). The plan-format spec defines the on-disk shape; R14 in the controller spec defines what the controller does with it. Coupling rather than plugin-style decoupling was a deliberate decision to keep the workflow anchored to the C4 model and prevent drift from business requirements.
 
-There is no source code, no build, no tests, no package manager, and no CI. Treat tasks here as **spec editing**, not software engineering. Don't propose adding tooling (linters, CI, package.json) unless explicitly asked.
+Spec files and plugin source coexist here. Spec edits follow the discipline below. Plugin source follows standard TypeScript/Bash conventions — `helpers/c4/` has its own `package.json`, `tsconfig.json`, and `vitest.config.ts`.
 
 ## The Core Abstraction
 

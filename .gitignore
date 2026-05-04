@@ -1,0 +1,16 @@
+# Runtime state — ephemeral, per-user, never committed
+.claude/darwin-state/
+.claude/darwin-worktrees/
+
+# Operational files injected into worktrees at runtime
+.claude/settings.json
+.claude/CLAUDE.md
+.claude/agents/
+.claude/escalation-ladder.json
+.claude/darwin-pairings/
+
+# Plugin source IS committed — kept via the negation rules below
+# (If a parent rule blocks .claude/, these overrides allow the plugin subtree)
+!.claude/plugins/
+!.claude/plugins/darwin/
+!.claude/plugins/darwin/**

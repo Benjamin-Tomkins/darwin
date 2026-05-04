@@ -4,10 +4,10 @@
 
 The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the controller — an agentic session following the `darwin-worktree.md` skill. No standalone process, daemon, or SDK loop is required.
 
-**Plugin layout:**
+**Plugin layout** (repo-local, committed to git):
 
 ```
-~/.claude/plugins/darwin/
+<repo>/.claude/plugins/darwin/
 ├── skills/
 │   ├── darwin-init.md          # /darwin-init — project setup, runtime detection, pairing validation
 │   └── darwin-worktree.md      # /darwin-worktree — Ralph loop controller
@@ -26,6 +26,26 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
     │   ├── resolve-phase-transition.js
     │   └── token-delta.js        # two token snapshots → delta {input, output, thinking}
     └── src/                      # TypeScript source
+```
+
+The plugin lives at `.claude/plugins/darwin/` inside the repo and is committed to git. Claude Code discovers it automatically when running in the repo directory via `CLAUDE_PLUGIN_ROOT`. Compiled artifacts (`bin/*.js`) are also committed so no build step is required at runtime.
+
+`.gitignore` must exclude runtime-only paths while allowing the plugin source:
+
+```gitignore
+# Runtime state — ephemeral, per-user
+.claude/darwin-state/
+.claude/darwin-worktrees/
+.claude/settings.json
+.claude/CLAUDE.md
+.claude/agents/
+.claude/escalation-ladder.json
+.claude/darwin-pairings/
+
+# Plugin source stays in git
+!.claude/plugins/
+!.claude/plugins/darwin/
+!.claude/plugins/darwin/**
 ```
 
 State persistence is via Git trailers on `agent/<slug>` branches. `~/.claude/darwin-state/` holds ephemeral runtime state (signal files, `runtime.json`) that does not enter version control.
@@ -148,7 +168,7 @@ fi
 ```bash
 EXEC=$(jq -r '.exec' ~/.claude/darwin-state/runtime.json)
 FLAGS=$(jq -r '.run_flags[]' ~/.claude/darwin-state/runtime.json)
-$EXEC $FLAGS ~/.claude/plugins/darwin/helpers/c4/bin/parse-index.js --file ./index.adoc
+$EXEC $FLAGS "$(git rev-parse --show-toplevel)/.claude/plugins/darwin/helpers/c4/bin/parse-index.js" --file ./index.adoc
 ```
 
 ---

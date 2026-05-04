@@ -14,7 +14,8 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
 │   └── darwin-worktree/
 │       └── SKILL.md            # /darwin-worktree — Ralph loop controller
 ├── hooks/
-│   ├── hooks.json                # registers WorktreeCreate + SubagentStop
+│   ├── hooks.json                # registers SessionStart + WorktreeCreate + SubagentStop
+│   ├── session-start.sh          # auto-setup: detect runtime, seed escalation-ladder.json
 │   ├── worktree-create.sh        # sparse checkout, .claude/ injection, skip-worktree
 │   └── subagent-stop.sh          # writes signal to ~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json
 └── helpers/c4/
@@ -77,6 +78,16 @@ Two skills. Each skill lives in its own subdirectory under `skills/` as `SKILL.m
 ---
 
 ## Section 3: Hook Layer
+
+**`SessionStart`** — automatic plugin setup; fires once per Claude Code session.
+
+Registered as `async: true` so it doesn't delay session startup. Runs two setup tasks:
+
+1. **Runtime detection** — invokes `helpers/c4/detect-runtime.sh`, which probes for Bun → Node 20+ → Deno (in priority order) and writes `~/.claude/darwin-state/runtime.json` with `{runtime, exec, pm, run_flags}`. Re-runs on every session to pick up runtime changes. If no supported runtime is found, a warning is printed to stderr but the session is not blocked.
+
+2. **Escalation ladder seeding** — creates `~/.claude/escalation-ladder.json` with a default three-tier Claude model ladder if the file does not already exist. The default tiers are Haiku (tier 1), Sonnet (tier 2), Opus (tier 3). The hook never overwrites an existing ladder, so user customisations are preserved.
+
+This hook eliminates all manual setup. Users can open a session in any Darwin project and run `/darwin-init` or `/darwin-worktree` immediately — the runtime and ladder are already configured.
 
 **`WorktreeCreate`** — replaces Claude Code's default `git worktree add`.
 

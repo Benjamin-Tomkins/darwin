@@ -8,7 +8,7 @@ writable_globs:
   - src/**
 
 [task-state]
-status: running
+status: ●
 agent_name: greeter-impl-attempt-1
 worktree_path: /Users/benjamintomkins/.claude/darwin-worktrees/ac4b8dc/greeter-impl
 signal_path: /Users/benjamintomkins/.claude/darwin-state/ac4b8dc/greeter-impl/signal.json

@@ -144,6 +144,30 @@ else
   fail "vitest tests failed — run 'npm test' in .claude/plugins/darwin/helpers/c4 for details"
 fi
 
+# ── 6. skill file validation ─────────────────────────────────────────────
+
+echo ""
+echo "--- 6. skill file validation"
+for skill_dir in "$PLUGIN/skills"/*/; do
+  skill_name=$(basename "$skill_dir")
+  skill_file="$skill_dir/SKILL.md"
+  if [ ! -f "$skill_file" ]; then
+    fail "skill $skill_name: SKILL.md missing"
+    continue
+  fi
+  # Frontmatter must open with --- and contain name:
+  if head -1 "$skill_file" | grep -q '^---$'; then
+    ok "skill $skill_name: SKILL.md has frontmatter"
+  else
+    fail "skill $skill_name: SKILL.md missing YAML frontmatter"
+  fi
+  if grep -q '^name:' "$skill_file"; then
+    ok "skill $skill_name: SKILL.md has name field"
+  else
+    fail "skill $skill_name: SKILL.md missing name field"
+  fi
+done
+
 # ── Summary ───────────────────────────────────────────────────────────────
 
 echo ""

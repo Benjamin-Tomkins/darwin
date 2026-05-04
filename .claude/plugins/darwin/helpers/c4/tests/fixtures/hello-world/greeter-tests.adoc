@@ -1,0 +1,23 @@
+= Greeter Tests
+
+:phase: spec
+
+[task]
+pairing: hello-world-tests
+writable_globs:
+  - tests/**
+
+[task-state]
+status: ◌
+
+== Tests
+
+Create `tests/greeter.test.js`. Requirements:
+
+- Use `node:assert` for assertions (no test framework needed)
+- Define a local `greet(name)` function that returns `Hello, <name>!`
+- Assert: `greet('World') === 'Hello, World!'`
+- Assert: `greet('Darwin') === 'Hello, Darwin!'`
+- Assert: `greet('') === 'Hello, !'`
+- Print `All tests passed.` on success
+- Do not import from `src/` — define the function locally in the test file

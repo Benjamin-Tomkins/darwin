@@ -1,0 +1,16 @@
+= API Implementation
+
+:phase: spec
+
+[task]
+pairing: hello-world-api
+writable_globs:
+  - src/api/**
+
+[task-state]
+status: ◌
+
+== Implementation
+
+Create `src/api/handler.js` that exports a function `handle(req)` returning `{ status: 200, body: 'OK' }`.
+Use CommonJS `module.exports`. No dependencies, no other files.

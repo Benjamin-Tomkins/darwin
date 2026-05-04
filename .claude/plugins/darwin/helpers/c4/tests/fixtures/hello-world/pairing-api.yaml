@@ -1,0 +1,22 @@
+name: hello-world-api
+agent:
+  instructions: |
+    Create src/api/handler.js exactly as described in your task.
+    Use CommonJS module.exports. Do not add any other files.
+evals:
+  - id: handler-exists
+    type: command
+    command: test -f src/api/handler.js
+    timeout: 10
+    on_fail:
+      problem: "src/api/handler.js does not exist"
+      hypothesis: "Agent did not create the handler file"
+      failure_class: validation-fail
+  - id: handler-check
+    type: command
+    command: node -e "const { handle } = require('./src/api/handler.js'); const r = handle({}); if (r.status !== 200 || r.body !== 'OK') process.exit(1); console.log('OK');"
+    timeout: 10
+    on_fail:
+      problem: "handle({}) did not return { status: 200, body: 'OK' }"
+      hypothesis: "Function signature or return value is wrong"
+      failure_class: validation-fail

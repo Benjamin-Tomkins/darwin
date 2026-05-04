@@ -1,0 +1,23 @@
+name: hello-world-tests
+agent:
+  instructions: |
+    Create tests/greeter.test.js exactly as described in your task.
+    Use node:assert. Define a local greet(name) function — do not import from src/.
+    Do not create any other files.
+evals:
+  - id: test-file-exists
+    type: command
+    command: test -f tests/greeter.test.js
+    timeout: 10
+    on_fail:
+      problem: "tests/greeter.test.js does not exist"
+      hypothesis: "Agent did not create the test file"
+      failure_class: validation-fail
+  - id: test-passes
+    type: command
+    command: node tests/greeter.test.js
+    timeout: 15
+    on_fail:
+      problem: "tests/greeter.test.js did not exit 0"
+      hypothesis: "Test assertions failed or syntax error in test file"
+      failure_class: validation-fail

@@ -9,7 +9,7 @@ writable_globs:
 
 [task-state]
 status: running
-agent_name: api-impl-attempt-1
+agent_name: api-impl-attempt-2
 worktree_path: /Users/benjamintomkins/.claude/darwin-worktrees/ac4b8dc/api-impl
 signal_path: /Users/benjamintomkins/.claude/darwin-state/ac4b8dc/api-impl/signal.json
 

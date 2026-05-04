@@ -179,10 +179,10 @@ Derives: attempt count, current tier, Pairing-Hash (verified against on-disk pai
 10. Controller reads signal → reads agent_tokens → snapshot staged diff (git diff --staged)
 11. Run eval pipeline in isolated sandbox (pairing.evals, cheapest-first, declared order):
     for each eval step:
-      record eval_token_snapshot_before (from eval API response metadata)
-      run eval → result envelope
-      accumulate: eval_input += step.input_tokens; eval_output += step.output_tokens;
-                  eval_thinking += step.thinking_tokens
+      run eval → result envelope + API response metadata
+      accumulate: eval_input += response.usage.input_tokens
+                  eval_output += response.usage.output_tokens
+                  eval_thinking += response.usage.thinking_tokens
       if fail → short-circuit
 12. Verdict:
       pass  → commit ● + Agent-*/Eval-* token trailers + remaining trailers
@@ -271,6 +271,6 @@ This design is the deployment layer for the controller specified in `sparse-work
 - **R10** (skill interface): `/darwin-init` + `/darwin-worktree` are the two entry points
 - **R8.4–R8.6** (crash recovery): signal file + staged-diff resume paths
 - **R7.19–R7.20**: pre-spawn `[task-state]` write and context-limit checkpoint
-- **R12.8–R12.13**: co-evolving `tests`/`impl` pairs, tests gate, gate staleness, cross-task experience injection, re-evaluation attempt classification
+- **R12.8–R12.16**: co-evolving `tests`/`impl` pairs, tests gate, gate staleness, cross-task experience injection, re-evaluation attempt classification, model tier strategy, bidirectional experience propagation
 
 The controller spec remains normative for all loop semantics, eval contract, pairing schema, trailer vocabulary, and symbol definitions. This design doc covers only the Claude Code plugin shape and deployment mechanics.

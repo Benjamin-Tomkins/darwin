@@ -219,7 +219,19 @@ Attempt 4: empty token not handled
 
 This applies equally to subjective evals (LLM-judged architectural decisions, rubric-scored design reviews) and command evals. For command evals the test artifact is re-executed unchanged; the gate staleness check is still enforced. For rubric evals the judge gains concrete failure evidence to assess coverage against.
 
-Re-evaluation attempts triggered this way are classified `cross-task-reeval` and do not count against `max_attempts_total`. A separate `max_reeval_attempts` limit (default: 3) prevents runaway loops; exhausting it generates HANDOFF on the tests task.
+**Model tier strategy for co-evolving pairs:**
+
+The tests agent uses the standard escalation ladder — entry tier first, escalating on repeated failure, same as any other Ralph loop. For cross-task re-evaluation attempts (triggered by gate staleness), the tests agent starts at `tier-above` entry rather than entry, reflecting that the simpler model's test suite was insufficient to track impl failures.
+
+The cross-task rubric judge is unconditionally `judge_model: top` — the highest available tier — regardless of the tests agent's current tier. Standard evals in the tests pipeline (command evals, spec-coverage rubric) use their declared `judge_model`. Only the cross-task rubric is always top-tier, because assessing whether a test suite covers an evolving failure corpus across subjective, structural, and architectural dimensions requires broader reasoning than a tier-relative judge can reliably provide.
+
+The top-tier judge's findings propagate to both loops:
+- **Tests experience brief** receives: coverage gaps the judge identified (what tests are missing)
+- **Impl experience brief** receives: structural or architectural issues the judge surfaced that weren't previously in the impl failure corpus (e.g. "distributed transaction concern not captured in any test or attempt")
+
+Neither agent has to re-derive what the top-tier model already reasoned. The insight flows directly into the next attempt of each loop.
+
+Re-evaluation attempts triggered by gate staleness are classified `cross-task-reeval` and do not count against `max_attempts_total`. A separate `max_reeval_attempts` limit (default: 3) prevents runaway loops; exhausting it generates HANDOFF on the tests task.
 
 **Termination:** all tasks `●` → session ends with summary report. Any task `⊖` → HANDOFF.md generated, controller pauses; `/scaffold-worktree --resume <slug>` re-enters the loop.
 

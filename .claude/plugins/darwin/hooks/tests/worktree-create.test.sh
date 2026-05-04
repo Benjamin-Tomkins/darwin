@@ -111,7 +111,7 @@ cleanup2() {
   if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
     git -C "$PROJECT_DIR" worktree remove --force "$WORKTREE_PATH2" 2>/dev/null || true
   fi
-  rm -rf "$SIGNAL_BASE/$REPO_HASH2" "$WORKTREE_BASE/$REPO_HASH2"
+  rm -rf "${TEMPLATE_DIR2:-}" "$SIGNAL_BASE/$REPO_HASH2" "$WORKTREE_BASE/$REPO_HASH2"
 }
 trap 'cleanup; cleanup2' EXIT
 
@@ -151,6 +151,9 @@ allow_write2=$(jq -r '.sandbox.filesystem.allowWrite[0]' "$WORKTREE_PATH2/.claud
 some_key2=$(jq -r '.someKey' "$WORKTREE_PATH2/.claude/settings.json")
 [ "$some_key2" = "value" ] || fail "scenario 2: someKey not preserved after merge; got: $some_key2"
 
-rm -rf "$TEMPLATE_DIR2"
+# Verify that the template's sandbox.enabled=false is preserved through the merge
+# (we only patch allowWrite, not the enabled flag).
+enabled2=$(jq -r '.sandbox.enabled' "$WORKTREE_PATH2/.claude/settings.json")
+[ "$enabled2" = "false" ] || fail "scenario 2: template sandbox.enabled not preserved; got: $enabled2"
 
 echo "PASS: worktree-create.sh"

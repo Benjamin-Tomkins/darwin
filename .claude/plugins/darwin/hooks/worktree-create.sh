@@ -14,6 +14,12 @@ if [ -z "$WORKTREE_PATH" ]; then
 fi
 
 WORKTREE_BASE="$HOME/.claude/darwin-worktrees"
+
+if [[ "$WORKTREE_PATH" != "$WORKTREE_BASE/"* ]]; then
+  echo "worktree-create: path is not under expected base ($WORKTREE_BASE): $WORKTREE_PATH" >&2
+  exit 1
+fi
+
 SIGNAL_BASE="$HOME/.claude/darwin-state"
 RELATIVE="${WORKTREE_PATH#"$WORKTREE_BASE/"}"
 REPO_HASH="${RELATIVE%%/*}"
@@ -25,14 +31,26 @@ if [ ! -f "$MANIFEST_PATH" ]; then
   exit 1
 fi
 
-PROJECT_ROOT=$(jq -r '.project_root' "$MANIFEST_PATH")
+PROJECT_ROOT=$(jq -r '.project_root // empty' "$MANIFEST_PATH")
 BASE_REF=$(jq -r '.base_ref // "HEAD"' "$MANIFEST_PATH")
-BRANCH=$(jq -r '.branch' "$MANIFEST_PATH")
+BRANCH=$(jq -r '.branch // empty' "$MANIFEST_PATH")
+if [ -z "$PROJECT_ROOT" ] || [ -z "$BRANCH" ]; then
+  echo "worktree-create: manifest missing required field project_root or branch" >&2
+  exit 1
+fi
+
 AGENT_TEMPLATE_PATH=$(jq -r '.agent_template_path // empty' "$MANIFEST_PATH")
 
 # Create worktree with a new branch, no checkout yet
 mkdir -p "$(dirname "$WORKTREE_PATH")"
 git -C "$PROJECT_ROOT" worktree add --no-checkout -b "$BRANCH" "$WORKTREE_PATH" "$BASE_REF"
+_WORKTREE_CLEANUP=1
+_cleanup_worktree() {
+  [[ "${_WORKTREE_CLEANUP:-}" = "1" ]] || return 0
+  git -C "$PROJECT_ROOT" worktree remove --force "$WORKTREE_PATH" 2>/dev/null || true
+  rm -f "${TMPFILE:-}"
+}
+trap '_cleanup_worktree' EXIT
 
 # Configure sparse checkout (non-cone mode for glob support).
 # Always include .claude/** so injected configs are visible to the agent in the worktree.
@@ -61,7 +79,6 @@ WRITABLE=$(jq '.writable_globs // []' "$MANIFEST_PATH")
 if [ -f "$WORKTREE_PATH/.claude/settings.json" ]; then
   # Merge: patch just allowWrite into the existing template config
   TMPFILE=$(mktemp)
-  trap 'rm -f "$TMPFILE"' EXIT
   jq --argjson w "$WRITABLE" \
     '.sandbox.filesystem.allowWrite = $w' \
     "$WORKTREE_PATH/.claude/settings.json" > "$TMPFILE"
@@ -122,4 +139,5 @@ if [ -d "$WORKTREE_PATH/.claude/agents" ]; then
 fi
 
 # Return absolute worktree path to Claude Code on stdout
-echo "$WORKTREE_PATH"
+_WORKTREE_CLEANUP=""
+printf '%s\n' "$WORKTREE_PATH"

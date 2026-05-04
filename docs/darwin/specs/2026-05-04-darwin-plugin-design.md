@@ -23,7 +23,8 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
     │   ├── branch-name.js        # slug chain → canonical branch string
     │   ├── format-trailers.js    # commit metadata → Git trailer block
     │   ├── validate-property.js  # property lifecycle guard
-    │   └── resolve-phase-transition.js
+    │   ├── resolve-phase-transition.js
+    │   └── token-delta.js        # two token snapshots → delta {input, output, thinking}
     └── src/                      # TypeScript source
 ```
 
@@ -76,6 +77,8 @@ cwd:         ~/.claude/darwin-worktrees/a3f9c1/auth-rs256
 signal path: ~/.claude/darwin-state/a3f9c1/auth-rs256/signal.json
 ```
 
+Also reads `transcript_path` and sums `input_tokens`, `output_tokens`, and `thinking_tokens` across all API turns in the subagent session. Writes `signal.json` containing both the stop metadata and `agent_tokens: {input, output, thinking}`.
+
 One signal path per task (not per session), so concurrent tasks on distinct branches never collide. The path is pre-computable by the controller before spawning and is stored in `[task-state]` as `signal_path`. Does not decide outcome — the controller reads the signal and drives all decisions.
 
 Note: `session_id` in the hook input is the **parent** controller's session ID, not the subagent's. The subagent's own session ID is not exposed by the hook. The `name:` frontmatter field (set to `<task-slug>-attempt-<N>`) may equal `agent_id` in the hook input, but this mapping is not confirmed in the Claude Code documentation; signal routing uses `cwd`-derived paths, not `agent_id`.
@@ -105,7 +108,7 @@ Note: `session_id` in the hook input is the **parent** controller's session ID, 
 
 ## Section 4: TypeScript Helper Layer
 
-Five pure-function CLIs compiled to plain ESM (`dist/`) at plugin build time. Any Bun / Node 20+ / Deno installation can execute them without a compile step at runtime.
+Six pure-function CLIs compiled to plain ESM (`dist/`) at plugin build time. Any Bun / Node 20+ / Deno installation can execute them without a compile step at runtime.
 
 | Helper | Input | Output |
 |---|---|---|
@@ -114,6 +117,7 @@ Five pure-function CLIs compiled to plain ESM (`dist/`) at plugin build time. An
 | `format-trailers` | commit metadata JSON on stdin | Git trailer block |
 | `validate-property` | element JSON + key + phase | Exit 0 = valid; exit 1 + stderr = violation |
 | `resolve-phase-transition` | `index.adoc` + element slug + new phase | Exit 0 = valid; emits `Phase-Transition: true` trailer if pairing-hash change is permitted without tripping R7.18's hash-drift halt |
+| `token-delta` | two token snapshot JSONs `{input, output, thinking}` on stdin | Delta JSON `{input_delta, output_delta, thinking_delta}` for one operation boundary |
 
 **Runtime detection** (once, at `/darwin-init`):
 
@@ -170,13 +174,24 @@ Derives: attempt count, current tier, Pairing-Hash (verified against on-disk pai
     (uses pairing.scope.writable_globs + readonly_globs for sparse checkout;
      pairing's agent template populates .claude/CLAUDE.md, settings.json, agents/task-agent.md)
 8.  Spawn subagent (Agent tool, fresh invocation — blocks until subagent stops)
-9.  SubagentStop hook fires → derives signal_path from cwd; writes signal file
-10. Controller reads signal → snapshot staged diff (git diff --staged in worktree)
-11. Run eval pipeline in isolated sandbox (pairing.evals, cheapest-first, declared order)
+9.  SubagentStop hook fires → reads transcript_path; extracts cumulative token usage;
+    writes signal.json with {agent_tokens: {input, output, thinking}, ...stop metadata}
+10. Controller reads signal → reads agent_tokens → snapshot staged diff (git diff --staged)
+11. Run eval pipeline in isolated sandbox (pairing.evals, cheapest-first, declared order):
+    for each eval step:
+      record eval_token_snapshot_before (from eval API response metadata)
+      run eval → result envelope
+      accumulate: eval_input += step.input_tokens; eval_output += step.output_tokens;
+                  eval_thinking += step.thinking_tokens
+      if fail → short-circuit
 12. Verdict:
-      pass  → commit ● + trailers → update [task-state] → done
-      fail  → commit ⊗ + ↺ → check circuit breakers → retry/escalate/widen/HANDOFF
+      pass  → commit ● + Agent-*/Eval-* token trailers + remaining trailers
+               → update [task-state] → done
+      fail  → commit ⊗ + Agent-*/Eval-* token trailers + remaining trailers
+               → ↺ → check circuit breakers → retry/escalate/widen/HANDOFF
 ```
+
+Token trailers on every ⊗/● commit give the full cost of that attempt node. `Agent-Thinking-Tokens` and `Eval-Thinking-Tokens` are 0 for non-thinking models. The growing `Agent-Input-Tokens` across retries reflects the expanding experience brief — a signal of task complexity available from the Git log without external tooling.
 
 **Crash and resume recovery:**
 

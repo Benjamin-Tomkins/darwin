@@ -1093,6 +1093,12 @@ Author-Type: agent
 Eval-Id: tests
 Eval-Type: command
 Judge-Model:                    # empty for non-rubric evals
+Agent-Input-Tokens: 14820
+Agent-Output-Tokens: 2310
+Agent-Thinking-Tokens: 0
+Eval-Input-Tokens: 3540
+Eval-Output-Tokens: 410
+Eval-Thinking-Tokens: 0
 Problem: RS256 signature verification throws KeyMismatch on valid tokens
 Error-Excerpt: cryptography.exceptions.InvalidSignature
 Hypothesis: Key is PKCS#1 format; library expects PKCS#8.
@@ -1116,12 +1122,18 @@ Eval-Id: c4-conventions
 Eval-Type: rubric
 Judge-Model: claude-opus-4-7
 Judge-Verdict: container labels missing on 3 of 5 containers
+Agent-Input-Tokens: 31200
+Agent-Output-Tokens: 5840
+Agent-Thinking-Tokens: 8920
+Eval-Input-Tokens: 9100
+Eval-Output-Tokens: 1630
+Eval-Thinking-Tokens: 4250
 Problem: container boundaries unclear
 Hypothesis: agent treated containers as components; needs explicit boundaries
 Docs-Ref: notif-arch-requirement
 ```
 
-The `Judge-Verdict` trailer captures the rubric's prose verdict. The
+The `Judge-Verdict` trailer captures the rubric's prose verdict. Token trailers on ⊗ and ● commits capture the raw compute cost of each attempt node: agent invocation tokens (from subagent transcript), eval pipeline tokens (summed across all eval steps). Thinking tokens are 0 for non-thinking models. This corpus enables downstream analysis of cost vs. complexity vs. model tier. The
 `Judge-Model` trailer makes it clear which model adjudicated.
 
 #### ↺ rollback
@@ -1153,11 +1165,17 @@ Attempt: 4
 Model: claude-sonnet-4-6
 Ladder-Id: 2026-05-03T14:22:00Z
 Author-Type: agent
+Agent-Input-Tokens: 38640
+Agent-Output-Tokens: 6120
+Agent-Thinking-Tokens: 0
+Eval-Input-Tokens: 4870
+Eval-Output-Tokens: 590
+Eval-Thinking-Tokens: 0
 Evals-Passed: lint,tests,coverage
 Resolves: auth-rs256-requirement
 ```
 
-The `Evals-Passed` trailer records which evals certified the pass.
+The `Evals-Passed` trailer records which evals certified the pass. Token trailers on ⊗ and ● commits are identical in structure; the growing `Agent-Input-Tokens` across attempts reflects the expanding experience brief fed to each retry, making token growth an indirect signal of task complexity.
 
 #### ⚠ infrastructure failure / ↻ widen
 
@@ -1187,6 +1205,13 @@ git log --all --format='%H %s%n%(trailers:only,key=Judge-Model)%n%(trailers:only
 # Cross-pairing analysis: which pairings have highest first-pass success rate?
 git log --all --format='%(trailers:only,key=Pairing)%n%(trailers:only,key=Try-Status)%n%(trailers:only,key=Attempt)' \
   | compute_first_pass_rate
+
+# Token cost per attempt — agent vs. eval breakdown across all tasks:
+git log --all --format='%s%n%(trailers:only,key=Task)%n%(trailers:only,key=Attempt)%n%(trailers:only,key=Model)%n%(trailers:only,key=Agent-Input-Tokens)%n%(trailers:only,key=Agent-Output-Tokens)%n%(trailers:only,key=Agent-Thinking-Tokens)%n%(trailers:only,key=Eval-Input-Tokens)%n%(trailers:only,key=Eval-Output-Tokens)%n%(trailers:only,key=Eval-Thinking-Tokens)%n---'
+
+# Track how agent input tokens grow across retries (complexity signal):
+# Rising Agent-Input-Tokens across attempts = growing experience brief = harder problem.
+git log agent/<slug> --format='Attempt %(trailers:only,key=Attempt) | %(trailers:only,key=Agent-Input-Tokens) in | %(trailers:only,key=Agent-Thinking-Tokens) think'
 ```
 
 ---
@@ -1453,7 +1478,7 @@ file so the agent's local modifications do not propagate to other branches.
 |------|-------|---------|
 | `WorktreeCreate` | parent | Replaces git default (`.worktreeinclude` is NOT processed when this hook is registered — hook processes it manually). Hook: creates worktree, applies sparse checkout from `pairing.scope.readonly_globs + writable_globs`, runs validation closure, injects `.claude/` (settings, agent definition, CLAUDE.md) from pairing-specific templates, runs `git update-index --skip-worktree` on each injected file so agent edits stay local. Returns absolute worktree path on stdout. |
 | `PreToolUse:Edit`/`PreToolUse:Write` | agent | Enforces writable allowlist + protected tag regions. Allowlist comes from pairing's `scope.writable_globs`. |
-| `SubagentStop` | parent (signal) | Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives signal key from `cwd`: strips `~/.claude/darwin-worktrees/` prefix to obtain `<repo-hash>/<task-slug>`. Writes signal to `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json` (outside worktree; one path per task, not per session, so concurrent tasks on distinct branches never collide). Does not decide outcome — controller reads signal and drives the loop. |
+| `SubagentStop` | parent (signal) | Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives signal key from `cwd`: strips `~/.claude/darwin-worktrees/` prefix to obtain `<repo-hash>/<task-slug>`. Reads `transcript_path` to extract cumulative token usage (`input_tokens`, `output_tokens`, `thinking_tokens`) from the subagent session. Writes signal to `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json` containing `agent_tokens: {input, output, thinking}` alongside the stop metadata. One signal path per task; concurrent tasks on distinct branches never collide. Does not decide outcome — controller reads signal and drives the loop. |
 
 ---
 
@@ -1591,6 +1616,8 @@ This prevents:
 | R1.8 | `[IMPORTANT]` blocks default to starting at tier 2 (decoupled from `permissionMode`) | Should |
 | R1.9 | `depends_on:` lists in `[task]` block drive dependency graph ordering | Should |
 | R1.10 | `[task-state]` fields `agent_name`, `worktree_path`, and `signal_path` are written atomically with `status: running` before the Agent tool is called; these fields are overwritten on each new spawn attempt. `agent_name` is `<task-slug>-attempt-<N>`; `signal_path` is derived from `worktree_path` as `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json`. | Must |
+| R1.11 | Controller reads `agent_tokens` from `signal.json` (see R9.5) after SubagentStop and attaches `Agent-Input-Tokens`, `Agent-Output-Tokens`, and `Agent-Thinking-Tokens` trailers to every ⊗ and ● commit. `Agent-Thinking-Tokens` is 0 for non-thinking models. | Must |
+| R1.12 | Controller tracks token usage before and after each eval step in the pipeline by reading usage from each eval's API response; sums `input_tokens`, `output_tokens`, and `thinking_tokens` across all eval steps; attaches `Eval-Input-Tokens`, `Eval-Output-Tokens`, and `Eval-Thinking-Tokens` trailers to every ⊗ and ● commit. `Eval-Thinking-Tokens` is 0 when no eval step uses a thinking model. | Must |
 
 ### R2 — Worktree creation
 
@@ -1704,6 +1731,7 @@ This prevents:
 | R9.2 | Agent worktree scratch is limited to the paths declared in `sandbox.filesystem.allowWrite`; no additional scratch directory is provided. (`CLAUDE_CODE_TMPDIR` is not used — it does not apply to subagents spawned via the Agent tool.) | Must |
 | R9.3 | Controller signal state (`SubagentStop` output) is written to `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json` (derived from `cwd`, not from session ID), outside the worktree, so it survives worktree cleanup, is never staged, and does not collide across concurrent tasks on distinct branches. | Must |
 | R9.4 | Eval sandbox is a separate environment from the agent worktree (R5.6); the two never share filesystem state | Must |
+| R9.5 | `SubagentStop` hook reads `transcript_path`, extracts cumulative token usage from the subagent session (`input_tokens`, `output_tokens`, `thinking_tokens` — summed across all API turns in the transcript), and writes `agent_tokens: {input, output, thinking}` to `signal.json` alongside the stop metadata. `thinking_tokens` is 0 for non-thinking models. | Must |
 
 ### R10 — Skill interface
 
@@ -1764,7 +1792,7 @@ This prevents:
 
 ### R14 — C4 plan format adapter
 
-The controller can drive plans encoded in the C4 plan format (see `docs/superpowers/specs/2026-05-03-c4-plan-format.adoc`): a single `index.adoc` containing an embedded Structurizr DSL block plus flat sibling `.adoc` files referenced from DSL element `properties`. R14 codifies the controller's obligations when operating on this format.
+The controller can drive plans encoded in the C4 plan format (see `docs/darwin/specs/2026-05-03-c4-plan-format.adoc`): a single `index.adoc` containing an embedded Structurizr DSL block plus flat sibling `.adoc` files referenced from DSL element `properties`. R14 codifies the controller's obligations when operating on this format.
 
 | | Requirement | Priority |
 |---|---|---|

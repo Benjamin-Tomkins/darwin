@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This repo is a **design specification project**, not an implementation. Two specs live here:
 
 - `sparse-workflow.md` (~1850 lines) — the **controller spec**. The self-healing state machine for AI agent + evaluator pairs. Defines the `(agent, eval) → controller` Ralph loop, the eval contract, sandbox isolation, the trust model, and the full Requirements set (R0–R14).
-- `docs/superpowers/specs/2026-05-03-c4-plan-format.adoc` (~700 lines) — the **plan-format spec**. The on-disk encoding the controller orchestrates: a single `index.adoc` with an embedded Structurizr DSL block holding the canonical C4 model, plus flat sibling `.adoc` files for human-readable detail (BDD, pseudo-code, implementation plans). C4 hierarchy lives in Git branch names, not folders.
+- `docs/darwin/specs/2026-05-03-c4-plan-format.adoc` (~700 lines) — the **plan-format spec**. The on-disk encoding the controller orchestrates: a single `index.adoc` with an embedded Structurizr DSL block holding the canonical C4 model, plus flat sibling `.adoc` files for human-readable detail (BDD, pseudo-code, implementation plans). C4 hierarchy lives in Git branch names, not folders.
 
 The two specs are **tightly coupled** by design: the controller spec includes a dedicated **R14 — C4 plan format adapter** section codifying the controller's obligations when operating on the C4 format (DSL parsing, slug-based branch naming, `_index` suffix, single canonical index branch, property lifecycle, phase-transition mechanics, etc.). The plan-format spec defines the on-disk shape; R14 in the controller spec defines what the controller does with it. Coupling rather than plugin-style decoupling was a deliberate decision to keep the workflow anchored to the C4 model and prevent drift from business requirements.
 
@@ -31,7 +31,7 @@ These are load-bearing across the controller spec — changes to one almost alwa
 2. **Judge-model separation** — for any `rubric` eval, the resolved judge model must NOT appear in the agent's escalation ladder. Validated at pairing-load.
 3. **Commit pairing** — every `⊗` is immediately followed by exactly one `↺` (real inverse-diff commit, not empty); `●` is terminal; `⚠`, `↻`, and `⊖` are standalone and do NOT consume an attempt.
 4. **Git is authoritative** — plan/state on disk is a rendered view, regenerable from Git trailers. Never describe plan files as the source of truth.
-5. **Trailer vocabulary** — machine-readable fields go in Git trailers (`Try-Status`, `Pairing`, `Pairing-Hash`, `Eval-Id`, `Eval-Type`, `Judge-Model`, `Tier`, `Attempt`, `Model`, `Ladder-Id`, `Evals-Passed`, `Upstream-Task`, `Failure-Class`, plus the C4 adapter additions `Phase`, `Dsl-Element`, `Dsl-Tag`, `Phase-Transition`). Subject lines carry the symbol + short reason for humans only. Don't introduce new metadata as bracket-tags or subject-line fields.
+5. **Trailer vocabulary** — machine-readable fields go in Git trailers (`Try-Status`, `Pairing`, `Pairing-Hash`, `Eval-Id`, `Eval-Type`, `Judge-Model`, `Tier`, `Attempt`, `Model`, `Ladder-Id`, `Evals-Passed`, `Upstream-Task`, `Failure-Class`, plus the C4 adapter additions `Phase`, `Dsl-Element`, `Dsl-Tag`, `Phase-Transition`, plus the token-cost tracking additions `Agent-Input-Tokens`, `Agent-Output-Tokens`, `Agent-Thinking-Tokens`, `Eval-Input-Tokens`, `Eval-Output-Tokens`, `Eval-Thinking-Tokens`). Subject lines carry the symbol + short reason for humans only. Don't introduce new metadata as bracket-tags or subject-line fields.
 6. **Eval contract is fixed** — the JSON envelope schema (`verdict`, `failure_class`, `consumes_attempt`, `problem`, `hypothesis`, `evidence`, plus `upstream_task` for `upstream-constraint`, plus `evidence_quotes` on rubric results) is the stable interface. Adding a new eval type means defining how it produces this envelope, not extending the envelope.
 7. **Symbol vocabulary is fixed** — `◌◎⊗●⊖⊘` (status), `◈◉` (provenance), `↺↻⚠` (loop action). Don't invent new symbols; reuse existing ones.
 8. **Pairings are immutable per task instance** — pinned via `Pairing-Hash` (SHA-256 of canonicalised pairing YAML) on every commit. Mid-run hash drift halts with `needs-human` (R7.17/R7.18).
@@ -42,7 +42,7 @@ These are load-bearing across the controller spec — changes to one almost alwa
 
 ## Plan-Format-Specific Invariants
 
-When editing `docs/superpowers/specs/2026-05-03-c4-plan-format.adoc`:
+When editing `docs/darwin/specs/2026-05-03-c4-plan-format.adoc`:
 
 - **Two layers, one mechanism.** The format defines `index.adoc` (parsable Structurizr DSL embedded; the C4 model) and flat sibling task `.adoc`s (human-readable detail). Both run on the same sparse-workflow Ralph loop. Don't introduce a third layer or split the mechanism.
 - **Folder is flat; hierarchy is in Git branches.** Branches are slash-nested mirroring the chain of DSL `"slug"` properties walking up from the element to the project root.

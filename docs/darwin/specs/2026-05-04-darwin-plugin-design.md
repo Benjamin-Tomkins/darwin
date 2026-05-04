@@ -94,15 +94,27 @@ Note: `session_id` in the hook input is the **parent** controller's session ID, 
     "filesystem": {
       "allowWrite": ["<from pairing.scope.writable_globs, expanded as explicit paths>"],
       "denyWrite": ["."],
-      "denyRead": ["./.git/**", "../**/.git/**", "~/.ssh", "~/.aws", "./.env*", "./secrets/**"]
+      "denyRead": [
+        ".git",
+        "~/.ssh", "~/.aws", "~/.gnupg",
+        ".env", ".env.local", ".env.production", ".env.test",
+        "secrets"
+      ]
     }
   },
   "permissions": {
     "allow": ["<expanded from pairing.scope>"],
-    "deny": ["Bash(*)", "Read(./.git/**)", "<pairing deny rules + project defaults>"]
+    "deny": ["Bash(*)", "Read(.git/)", "<pairing deny rules + project defaults>"]
   }
 }
 ```
+
+**Implementation notes:**
+
+- **`allowWrite` / `denyWrite` precedence**: The Claude Code docs confirm `allowRead` overrides `denyRead`, but do not explicitly confirm the equivalent for `allowWrite` / `denyWrite`. At implementation time, verify that `allowWrite` paths punch through `denyWrite: ["."]`. If they do not, the fallback is to drop `denyWrite` and rely solely on `allowWrite` (which restricts beyond the default CWD-is-writable behaviour) combined with `permissions.deny` rules for the Edit/Write tools.
+- **Glob patterns**: `sandbox.filesystem` path support for globs is not confirmed in Claude Code documentation. Paths above use concrete directory and file names. At implementation time, test whether glob patterns are supported before using them; otherwise enumerate specific paths.
+- **Parent git directory**: The `../\**/.git/**` entry from earlier drafts was removed. Worktrees live at `~/.claude/darwin-worktrees/`; relative traversal to the project git dir is an infrastructure concern. Accessing it by absolute path would be project-specific. Network-layer and VM isolation (see setup README) is the appropriate mitigation.
+- **Network isolation**: Not configured at the per-task sandbox level. Darwin should be run inside an Incus container or isolated VM to enforce network boundaries at the infrastructure layer. The setup README must document this deployment requirement.
 
 ---
 
@@ -259,6 +271,7 @@ Re-evaluation attempts triggered by gate staleness are classified `cross-task-re
 - Windows support (Seatbelt/bubblewrap sandbox not available)
 - Deno as a build/test runtime (execution-only; vitest requires Bun or Node)
 - Per-element `.gitignore` files (project `.gitignore` seeded by `/darwin-init` handles all injected operational files)
+- Network isolation at the per-task sandbox level — delegated to deployment infrastructure (Incus container or isolated VM). A setup README must document the recommended deployment topology for secure Darwin use.
 
 ---
 

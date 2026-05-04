@@ -1532,17 +1532,27 @@ Pairings parameterise the file lists; the shape is fixed:
     "filesystem": {
       "allowWrite": ["<from pairing.scope.writable_globs, expanded as explicit paths>"],
       "denyWrite": ["."],
-      "denyRead": ["./.git/**", "../**/.git/**", "~/.ssh", "~/.aws",
-                   "./.env*", "./secrets/**"]
+      "denyRead": [
+        ".git",
+        "~/.ssh", "~/.aws", "~/.gnupg",
+        ".env", ".env.local", ".env.production", ".env.test",
+        "secrets"
+      ]
     }
   },
   "permissions": {
     "allow": ["<expanded from pairing.scope>"],
-    "deny": ["Bash(*)", "Read(./.git/**)",
+    "deny": ["Bash(*)", "Read(.git/)",
              "<expanded from pairing's deny rules + project defaults>"]
   }
 }
 ```
+
+**Implementation notes on this config:**
+- `allowWrite`/`denyWrite` precedence is confirmed for `allowRead`/`denyRead` in Claude Code docs but not explicitly for write. Verify at implementation time that `allowWrite` paths override `denyWrite: ["."]`. Fallback: drop `denyWrite` and enforce write scope entirely through `allowWrite` + `permissions.deny` on Edit/Write tools.
+- `sandbox.filesystem` glob pattern support is unconfirmed in Claude Code documentation. The config above uses concrete paths only. Verify glob support before using wildcard patterns; otherwise enumerate specific filenames.
+- Parent git directory access via relative traversal (`../`) is mitigated by infrastructure isolation, not this config. Darwin should run inside an Incus container or isolated VM; the setup README must document this requirement.
+- Network isolation is not configured at the per-task sandbox level — it is delegated to the deployment infrastructure (see above).
 
 ---
 

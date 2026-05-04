@@ -8,17 +8,18 @@ mkdir -p "$DARWIN_STATE_DIR"
 RUNTIME_JSON="$DARWIN_STATE_DIR/runtime.json"
 
 write_runtime() {
-  printf '{"runtime":"%s","exec":"%s","pm":"%s","run_flags":"%s"}\n' \
+  # $4 is a JSON array literal, e.g. '["run"]' or '[]'
+  printf '{"runtime":"%s","exec":"%s","pm":"%s","run_flags":%s}\n' \
     "$1" "$2" "$3" "$4" > "$RUNTIME_JSON"
 }
 
-# Bun
+# Bun: invoked as `bun run file.ts`
 if command -v bun >/dev/null 2>&1; then
-  write_runtime "bun" "bun" "bun" "run"
+  write_runtime "bun" "bun" "bun" '["run"]'
   exit 0
 fi
 
-# Node.js — requires v20+
+# Node.js — requires v20+: invoked as `node file.js` (no extra flags)
 if command -v node >/dev/null 2>&1; then
   major=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1)
   if [ "${major:-0}" -ge 20 ] 2>/dev/null; then
@@ -29,14 +30,14 @@ if command -v node >/dev/null 2>&1; then
     else
       pm="npm"
     fi
-    write_runtime "node" "node" "$pm" "run"
+    write_runtime "node" "node" "$pm" '[]'
     exit 0
   fi
 fi
 
-# Deno
+# Deno: invoked as `deno run file.ts`
 if command -v deno >/dev/null 2>&1; then
-  write_runtime "deno" "deno" "deno" "run"
+  write_runtime "deno" "deno" "deno" '["run"]'
   exit 0
 fi
 

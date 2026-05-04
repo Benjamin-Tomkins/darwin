@@ -21,8 +21,7 @@ fail() { echo -e "${RED}FAIL${NC}  $1"; ((FAIL++)) || true; }
 # Detect runtime exec from runtime.json (or fall back to bun/node)
 if [ -f "$HOME/.claude/darwin-state/runtime.json" ]; then
   EXEC=$(jq -r '.exec' "$HOME/.claude/darwin-state/runtime.json")
-  # run_flags is stored as a string ("run"), not an array
-  FLAGS=$(jq -r '.run_flags // ""' "$HOME/.claude/darwin-state/runtime.json")
+  FLAGS=$(jq -r '.run_flags // [] | join(" ")' "$HOME/.claude/darwin-state/runtime.json")
 else
   EXEC="bun"
   FLAGS=""

@@ -1009,6 +1009,24 @@ The attempt-log column `tests fail-1` indicates which eval triggered the
 failure (eval id = `tests`, evidence = first failing test). This makes the
 log itself a forensic record of what was judged.
 
+`status: running` is written to `[task-state]` **before** the Agent tool is
+called, so a controller crash at any point during or after spawn is
+detectable on resume. The `session_id` identifies the signal file;
+`worktree_path` is the absolute path for diff inspection.
+
+```asciidoc
+[task-state]
+----
+status: running
+session_id: 7048d3c0-4798-4dd8-89d2-5b45a6a232ff
+worktree_path: /Users/alice/.claude/scaffold-worktrees/a3f9c1/auth-rs256
+last_attempt: 4
+branch: agent/auth-rs256
+ladder_id: 2026-05-03T14:22:00Z
+pairing_hash: sha256:9f2c1e0a8b73d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9
+----
+```
+
 For a non-code task with ad-hoc eval composition:
 
 ```asciidoc
@@ -1332,6 +1350,10 @@ Git is authoritative. Recovery rules:
 | `Ladder-Id` mismatch (model deprecated) | Historical commits remain valid; current tier resolved via current ladder |
 | Pairing referenced in trailer no longer exists | Block; require pairing to be restored or re-mapped |
 | `Pairing-Hash` mismatch between branch and on-disk pairing | Block with `needs-human`; pairing was edited mid-run; restore pinned version or human-approved migration to new pairing on a new branch |
+| `[task-state]` shows `status: running` AND signal file exists at `~/.claude/scaffold-state/<session_id>/signal.json` | Controller crashed after subagent finished but before eval ran. Do NOT re-spawn. Snapshot staged diff from `worktree_path`; re-run eval pipeline; commit result normally. |
+| `[task-state]` shows `status: running` AND no signal file AND worktree has staged changes | Both controller and subagent crashed; agent had work in progress. Treat staged diff as the agent's output: re-run eval pipeline. On pass commit ●; on fail commit ⊗ + ↺ and retry. |
+| `[task-state]` shows `status: running` AND no signal file AND worktree is clean | Controller crashed before or during spawn, or subagent crashed immediately without producing output. Discard worktree contents, reset `[task-state]` to `status: ◌`, retry attempt at same tier. |
+| Controller session context limit reached mid-loop | Controller updates all open `[task-state]` blocks to their current status, emits a checkpoint message, and stops. User re-invokes `/scaffold-worktree` to continue; new session reconstructs state from Git and `[task-state]`. |
 
 ---
 
@@ -1563,6 +1585,7 @@ This prevents:
 | R1.7 | `[task-state]` is reconcilable from Git on resume; Git authoritative | Must |
 | R1.8 | `[IMPORTANT]` blocks default to starting at tier 2 (decoupled from `permissionMode`) | Should |
 | R1.9 | `depends_on:` lists in `[task]` block drive dependency graph ordering | Should |
+| R1.10 | `[task-state]` fields `session_id` and `worktree_path` are written atomically with `status: running` before the Agent tool is called; these fields are cleared (or overwritten) on each new spawn attempt | Must |
 
 ### R2 — Worktree creation
 
@@ -1654,6 +1677,8 @@ This prevents:
 | R7.16 | Concurrent task evaluation is permitted only across distinct `agent/<slug>` branches; two attempts on the same branch are never in flight simultaneously | Must |
 | R7.17 | First commit on an `agent/<slug>` branch records `Pairing-Hash` (SHA-256 of canonicalised pairing YAML); all subsequent commits on that branch must carry the same `Pairing-Hash`. The branch is pinned to that pairing version for its lifetime. | Must |
 | R7.18 | If the on-disk pairing YAML hashes differently from the branch's `Pairing-Hash` mid-run, the task halts with `failure_class: needs-human` and HANDOFF naming the hash mismatch. Pairings are immutable per task instance. | Must |
+| R7.19 | Before invoking the Agent tool, controller writes `status: running`, `session_id`, and `worktree_path` to the task's `[task-state]` block. This is the crash-recovery commit point: any later interruption leaves detectable state. | Must |
+| R7.20 | Controller monitors approximate context token usage after each task completion. At 80% of the session context limit, it finishes the current task, updates all open `[task-state]` blocks to their latest status, and emits a checkpoint message instructing the user to re-invoke `/scaffold-worktree` to continue. The following session reconstructs full state from Git trailers and `[task-state]`. | Must |
 
 ### R8 — Crash recovery
 
@@ -1662,6 +1687,9 @@ This prevents:
 | R8.1 | Git is the authoritative state source; the controller can rebuild any task's runtime state from `agent/<slug>` branch trailers without consulting external storage | Must |
 | R8.2 | On resume, controller applies the recovery-rules table from the "Crash Recovery" section above; cases not covered by the table are escalated as `needs-human` | Must |
 | R8.3 | A worktree found dirty at a `↺` commit is not auto-repaired; the controller blocks and surfaces a HANDOFF | Must |
+| R8.4 | On resume, for every task with `status: running` in `[task-state]`, the controller checks for a signal file at `~/.claude/scaffold-state/<session_id>/signal.json` before deciding whether to re-spawn | Must |
+| R8.5 | Signal file present on resume → treat as a pending SubagentStop; snapshot the staged diff from `worktree_path`; run eval pipeline; commit result. Do not re-spawn the subagent. | Must |
+| R8.6 | No signal file on resume → inspect worktree at `worktree_path` for staged changes. Staged changes present: run eval pipeline on them. Worktree clean: discard, reset `[task-state]` to `status: ◌`, and schedule a fresh retry at the same tier. | Must |
 
 ### R9 — Sandbox & temporary space
 

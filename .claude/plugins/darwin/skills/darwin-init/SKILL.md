@@ -48,11 +48,18 @@ If `.gitignore` does not exist, create it first (an empty file is fine). Then pr
 Read the project `.gitignore`. For each of the following lines that is NOT already present, append it:
 
 ```
-.claude/settings.json
 .claude/agents/
 .claude/CLAUDE.md
 .claude/escalation-ladder.json
 ```
+
+**Do NOT add `.claude/settings.json` to `.gitignore`.** This file is committed project-level config (marketplace registration, enabled plugins, permissions). Check whether it is already tracked and skip if so:
+
+```bash
+git ls-files --error-unmatch .claude/settings.json 2>/dev/null && echo "tracked" || echo "untracked"
+```
+
+If the output is `untracked`, it is safe to add to `.gitignore` if the project does not use a local marketplace. Otherwise leave it out.
 
 Use the Edit tool to make any additions. Do not remove existing content.
 

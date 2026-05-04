@@ -1,3 +1,8 @@
+---
+name: darwin-init
+description: Initializes a project for use with Darwin (the Ralph loop controller). Use when running /darwin-init, setting up a new Darwin project for the first time, or before the first /darwin-worktree session. Handles runtime detection, .gitignore seeding, pairing validation, and escalation ladder verification.
+---
+
 # /darwin-init
 
 Initialize a project for use with Darwin. Follow these steps in order. Stop and report any error before proceeding to the next step.

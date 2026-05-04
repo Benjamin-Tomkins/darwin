@@ -9,8 +9,10 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
 ```
 <repo>/.claude/plugins/darwin/
 ├── skills/
-│   ├── darwin-init.md          # /darwin-init — project setup, runtime detection, pairing validation
-│   └── darwin-worktree.md      # /darwin-worktree — Ralph loop controller
+│   ├── darwin-init/
+│   │   └── SKILL.md            # /darwin-init — project setup, runtime detection, pairing validation
+│   └── darwin-worktree/
+│       └── SKILL.md            # /darwin-worktree — Ralph loop controller
 ├── hooks/
 │   ├── hooks.json                # registers WorktreeCreate + SubagentStop
 │   ├── worktree-create.sh        # sparse checkout, .claude/ injection, skip-worktree
@@ -54,7 +56,7 @@ State persistence is via Git trailers on `agent/<slug>` branches. `~/.claude/dar
 
 ## Section 2: Skill Layer
 
-Two skills. Both are Markdown files; the controller session follows their instructions directly via the Bash and Agent tools.
+Two skills. Each skill lives in its own subdirectory under `skills/` as `SKILL.md` — the official Claude Code skill format. The file must have YAML frontmatter (delimited by `---`) with a `name` field (kebab-case, matches the slash command) and a `description` field (what the skill does and when to invoke it, under 1024 characters). Claude Code loads the frontmatter into the system prompt for discovery; the full body is loaded on demand when the skill is invoked. The controller session follows the skill instructions directly via the Bash and Agent tools.
 
 **`/darwin-init`** (one-time setup per project):
 1. Detects JS runtime (`bun` → `node` 20+ → `deno`); stores `~/.claude/darwin-state/runtime.json`; blocks if none found

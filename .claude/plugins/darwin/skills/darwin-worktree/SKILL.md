@@ -1,3 +1,8 @@
+---
+name: darwin-worktree
+description: Drives the Darwin Ralph loop controller, executing plan tasks via self-healing agent/eval pairs with automatic retry and circuit breakers. Use when running /darwin-worktree on a C4 plan or AsciiDoc plan file, resuming after a HANDOFF, or orchestrating the Ralph loop for implementation tasks.
+---
+
 # /darwin-worktree
 
 You are the Darwin parent controller — a Claude Code session following these instructions. Drive the Ralph loop to completion for all tasks in the plan. Do not delegate decisions to the agent or to evaluators. You own the loop.

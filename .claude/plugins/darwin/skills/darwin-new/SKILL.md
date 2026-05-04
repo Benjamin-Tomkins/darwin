@@ -1,11 +1,13 @@
 ---
 name: darwin-new
-description: Guided C4 model builder — walks through Context → Containers → Components → Asset stubs, producing AsciiDoc files ready for /darwin-worktree. Use when starting a new Darwin project from scratch.
+description: Guided C4 model builder — walks through the big picture, applications & services, and internal structure, producing AsciiDoc files ready for /darwin-worktree. Use when starting a new project from scratch.
 ---
 
 # /darwin-new
 
 Guided creation of a C4 AsciiDoc plan. Produces `index.adoc` and sibling asset `.adoc` files ready for `/darwin-worktree`.
+
+You are guiding the user through a structured architectural conversation. They may not know C4 terminology — use plain professional language throughout. Map their answers to C4 internally (softwareSystem, container, component) without exposing those terms unless the user is already comfortable with C4.
 
 ---
 
@@ -29,10 +31,10 @@ Use TaskCreate at startup — one task per phase, with these exact names:
 
 1. Explore existing plans
 2. Gather project details
-3. Define context
-4. Define containers
-5. Define components
-6. Configure assets & pairings
+3. Map the big picture
+4. Identify applications & services
+5. Detail internal structure
+6. Plan implementation tasks
 7. Write files
 
 Mark each task completed immediately when the phase is done.
@@ -41,7 +43,7 @@ Mark each task completed immediately when the phase is done.
 
 ## Explore existing plans
 
-Check for any `index.adoc` or `*.adoc` files already in the repo:
+Check for any existing plan files:
 ```bash
 find . -name "index.adoc" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null
 ```
@@ -54,42 +56,49 @@ If any exist, show them and ask whether to start fresh or extend one.
 Ask in sequence (one per turn):
 
 1. **Project name** — display name, e.g. "Payment Service"
-2. **Slug** — auto-derive: lowercase, spaces→hyphens, strip specials. Show derived slug and ask "Slug: `<slug>` — looks good?" (yes / change to X)
+2. **Slug** — auto-derive from the name (lowercase, spaces→hyphens). Show it: "I'll use `<slug>` as the identifier — looks good?" (yes / change to X)
 3. **Plan directory** — default `plans/<slug>/`. Show and confirm.
-4. **One-line overview** — "What does this system do in one sentence?"
+4. **One-line overview** — "What does this system do?"
 
 Write nothing to disk yet.
 
 ---
 
-## Define context
+## Map the big picture
+
+_This step maps to C4 Level 1: System Context._
+
+Frame it naturally: "Let's start with the big picture — who this system serves and what it connects to."
 
 Three questions (one per turn):
 
-**Q1 — Software systems:**
-"Is this a single software system, or multiple independent systems?
-A) Single system (most common)
-B) Multiple systems — list them"
+**Q1 — Is this one product or several?**
 
-If B: collect name + one-line description for each.
+"Are you building a single product, or multiple independent products that should be modelled separately?
+A) Single product (most common)
+B) Multiple independent products — list them"
 
-**Q2 — Human actors:**
-"Who are the direct human users? (e.g. 'Admin, Customer') — or say 'none'"
+If B: for each, collect display name and one-line description. (Each maps to a C4 softwareSystem.)
 
-Collect name + role description for each.
+**Q2 — Who are the users?**
 
-**Q3 — External systems:**
-"Does this interact with any external services? (e.g. 'Stripe, SendGrid, PostgreSQL') — or say 'none'"
+"Who are the people that use this system directly? (e.g. 'Customer, Admin, Support Agent') — or say 'none'"
 
-Collect name + description for each.
+Collect name + one-line role description for each. (These are C4 persons/actors; they go in the Overview prose, not the DSL.)
+
+**Q3 — External connections**
+
+"What external services or systems does this connect to? Think: payment providers, email/SMS services, databases you don't own, third-party APIs, legacy systems. (e.g. 'Stripe, SendGrid, legacy ERP') — or say 'none'"
+
+Collect name + one-line description for each. (External systems go in prose only.)
 
 After all three, show a text summary and ask to confirm:
 
 ```
-Context:
-  Systems:   <name> (<slug>)
-  Actors:    <list or none>
-  External:  <list or none>
+Big picture:
+  Product(s):  <name> (<slug>)
+  Users:       <list or none>
+  Connects to: <list or none>
 
 Confirm? (yes / revise)
 ```
@@ -98,21 +107,37 @@ Do not proceed until confirmed.
 
 ---
 
-## Define containers
+## Identify applications & services
 
-For each software system, ask: "What are the **deployable units** inside `<System>`? List them (e.g. 'REST API, Background Worker, PostgreSQL DB') — or say 'single' to treat the system as an atomic unit."
+_This step maps to C4 Level 2: Containers (independently deployable/runnable units — not Docker containers)._
 
-For each container collect (one turn each):
+Frame it: "Now let's map out what you'd actually deploy or run. These are the independently operating parts: a web app, a REST API, a background worker, a database, a message queue — anything that runs in its own process or environment."
+
+For each product from the previous step, ask:
+
+**"What are the separately deployable pieces of `<Product>`?**
+List them (e.g. 'REST API, React frontend, PostgreSQL database, background worker') — or say 'single' if it's one deployable unit."
+
+For each piece, collect (one turn per piece if there are several; batch if only 1-2):
 - Display name
 - Slug (auto-derive, confirm)
-- Technology (optional — ask "Technology? e.g. Node.js, PostgreSQL — or press enter to skip")
-- One-line description
+- Technology (optional — "What technology? e.g. Node.js, PostgreSQL — skip if unsure")
+- One-line responsibility ("What does it do?")
 
-Show summary after all containers for a system:
+**Categorise each piece as one of:**
+- `app` — user-facing application (web, mobile, desktop)
+- `service` — API or backend process
+- `worker` — background job processor, queue consumer
+- `store` — database, cache, object storage, message broker
+- `gateway` — API gateway, reverse proxy, BFF
+
+This category affects whether it gets implementation tasks (apps, services, workers → yes; stores → typically not unless custom).
+
+Show summary after all pieces for a product:
 
 ```
-Containers in <System>:
-  <slug>   <Name> — <description>
+Applications & services in <Product>:
+  <slug>     <Name> (<category>) — <description>
   ...
 
 Confirm? (yes / revise)
@@ -120,40 +145,51 @@ Confirm? (yes / revise)
 
 ---
 
-## Define components
+## Detail internal structure
 
-For each container that is not a database/queue/external system, ask:
-"Does `<Container>` need to be decomposed into logical components? (e.g. 'UserService, AuthMiddleware, UserRepository')
-A) Yes — list them
-B) No — treat as atomic"
+_This step maps to C4 Level 3: Components. It is optional — use it only for complex services._
 
-If A: for each component collect name, slug (auto-derive, confirm), one-line description.
+Frame it: "For any complex services, we can map out the internal building blocks — things like request handlers, business logic layers, data access modules, or external adapters. This is optional: skip it for straightforward services."
 
-Show summary, confirm. It is fine for all containers to be atomic.
+For each `service` or `worker` piece from the previous step, ask:
+
+**"Does `<Name>` have distinct internal modules worth naming?**
+Think: controllers, service classes, repositories, adapters, middleware layers.
+A) Yes — list them (e.g. 'OrderController, PaymentAdapter, OrderRepository')
+B) No — it's straightforward enough as-is"
+
+If A: for each module collect name, slug (auto-derive, confirm), one-line responsibility.
+
+Show summary per service, confirm. It is fine and common to say No to all.
 
 ---
 
-## Configure assets & pairings
+## Plan implementation tasks
 
-For each **implementable element** (components, or atomic containers — not databases, queues, or external services), determine which assets to create.
+_Determines which asset files and pairing stubs to generate._
 
-Ask once per element (batch the questions in one turn to save turns):
+Frame it: "Now let's decide which parts need implementation tasks. For each piece we'll implement, we generate a stub file that describes what the AI agent should build."
+
+For each implementable element (apps, services, workers, and any internal modules — not stores):
+
+Ask once per element:
 
 ```
-For `<element-slug>` — which assets should I generate?
-A) impl only
-B) impl + tests
-C) impl + tests + BDD spec
-D) tests only
-E) skip (no assets)
+For `<Name>` — what should the agent produce?
+A) Implementation only
+B) Implementation + automated tests
+C) Implementation + tests + behaviour specs (BDD)
+D) Tests only
+E) Skip — no task needed
 ```
 
-After collecting all asset choices, ask for pairing configuration:
-"What pairing should I use for implementation tasks?
-A) Use a single default pairing for all elements (name it `<project-slug>`)
-B) Use separate pairings per element — I'll name them as we go"
+After collecting all choices, ask:
 
-For option B, ask the pairing name for each element that has an impl asset.
+**"How should I name the pairing configurations?**
+A) One shared pairing for all tasks (name: `<project-slug>`)
+B) Separate pairings per element — I'll ask as we go"
+
+For option B, ask the pairing name for each element that has an implementation task.
 
 ---
 
@@ -181,28 +217,27 @@ workspace "<project-slug>" {
 
 <overview text>
 
-== Context
+== Users
 
-=== Actors
+<user list: name — role description>
 
-<actor list>
+== External connections
 
-=== External Systems
-
-<external systems list>
+<external system list: name — description>
 ```
 
-Use six-dash `------` delimiters for the outer source block so inner `----` blocks in asset files don't prematurely close it.
+Use six-dash `------` delimiters for the outer source block so inner `----` blocks don't prematurely close it.
 
-**Structurizr DSL rules:**
-- Only elements that will be implemented appear in the DSL.
-- Actors and external systems go in the Overview prose, not the DSL (they have no slug and no tasks).
-- Nest containers inside their parent softwareSystem block.
-- Nest components inside their parent container block.
-- Every element that has at least one asset property must have a `slug` property.
-- Property keys: `slug`, `impl`, `tests`, `bdd`, `detail` (asset-reference), `skills` (metadata).
+**DSL rules:**
+- Only elements with implementation tasks appear in the DSL (they need slugs and asset properties).
+- Users and external connections go in the Overview prose sections only — they have no slug and no tasks.
+- Nest services/workers/apps inside their parent softwareSystem block (as `container` elements).
+- Nest internal modules inside their parent container block (as `component` elements).
+- Every element in the DSL must have a `slug` property.
+- Asset property keys: `impl`, `tests`, `bdd`, `detail`. Metadata keys: `slug`, `skills`.
+- Stores (databases, queues) only appear in the DSL if they have a task (rare — usually custom stores).
 
-**Example DSL structure:**
+**Example DSL:**
 
 ```
 softwareSystem "Payment Service" "Processes card payments" {
@@ -215,10 +250,10 @@ softwareSystem "Payment Service" "Processes card payments" {
       impl api-impl.adoc
       tests api-tests.adoc
     }
-    component "AuthMiddleware" "JWT validation" {
+    component "PaymentAdapter" "Stripe integration" {
       properties {
-        slug auth-middleware
-        impl auth-middleware-impl.adoc
+        slug payment-adapter
+        impl payment-adapter-impl.adoc
       }
     }
   }
@@ -254,22 +289,22 @@ status: ◌
 TODO: Describe what this task should produce.
 ```
 
-For `tests` and `bdd` assets, use `writable_globs: [tests/**]`.
+Use `writable_globs: [tests/**]` for `tests` and `bdd` assets.
 
 ### Pairing stubs
 
-One pairing per unique pairing name, at `.claude/darwin-pairings/<name>/pairing.yaml`:
+One directory per unique pairing name, at `.claude/darwin-pairings/<name>/pairing.yaml`:
 
 ```yaml
 name: <pairing-name>
 agent:
   instructions: |
-    TODO: Describe what the agent should do.
+    TODO: Describe what the agent should build.
     Be specific about file paths, function signatures, and expected behaviour.
 evals:
   - id: smoke
     type: command
-    command: echo "TODO: replace with a real eval command"
+    command: echo "TODO: replace with a real eval"
     timeout: 10
     on_fail:
       problem: "Pairing not configured"
@@ -277,7 +312,7 @@ evals:
       failure_class: validation-fail
 ```
 
-### After writing all files
+### After writing
 
 Print a compact file tree (not file contents):
 
@@ -290,12 +325,12 @@ Written:
   .claude/darwin-pairings/<name>/pairing.yaml
 
 Next steps:
-  1. Fill in TODO sections in each asset file — describe what each task should produce
-  2. Replace pairing.yaml stubs with real agent instructions and eval commands
-  3. Run /darwin-worktree <plan-dir>/index.adoc to start the Ralph loop
+  1. Fill in the TODO sections in each task file — describe what should be built
+  2. Update each pairing.yaml with real agent instructions and eval commands
+  3. Run /darwin-worktree to start the implementation loop
 ```
 
-Do NOT run /darwin-worktree automatically. The user needs to review and complete the stubs first.
+Do NOT run /darwin-worktree automatically.
 
 ---
 
@@ -316,6 +351,6 @@ Always show the derived slug and confirm before using it.
 
 ## Stopping and Resuming
 
-If the user says "stop" or "save progress" at any phase boundary, write a `.darwin-new-state.json` to the plan directory capturing all answers so far, and tell the user to run `/darwin-new --resume <plan-dir>` to continue.
+If the user says "stop" or "save progress" at any phase boundary, write `.darwin-new-state.json` to the plan directory capturing all answers so far. Tell the user to run `/darwin-new --resume <plan-dir>` to continue.
 
-If invoked with `--resume <plan-dir>`, read `.darwin-new-state.json`, show a summary of what was captured, and continue from the last incomplete phase.
+If invoked with `--resume <plan-dir>`, read `.darwin-new-state.json`, show a one-line summary of what was captured, and continue from the last incomplete phase.

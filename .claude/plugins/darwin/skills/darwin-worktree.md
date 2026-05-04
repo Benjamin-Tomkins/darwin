@@ -144,7 +144,7 @@ print('sha256:' + hashlib.sha256(canon.encode()).hexdigest())
 "
 ```
 
-If the computed hash differs from `pairing_hash` in the task's state (and `pairing_hash` is not empty → this is not the first attempt), halt: "Pairing hash drift on task <slug> — pairing was edited mid-run. Restore the pinned version or migrate to a new branch. (R7.18)"
+If the computed hash differs from `pairing_hash` in the task's state (and `pairing_hash` is not empty → this is not the first attempt), AND the latest commit on the branch does NOT have `Phase-Transition: true` as a trailer, halt: "Pairing hash drift on task <slug> — pairing was edited mid-run. Restore the pinned version or migrate to a new branch. (R7.18)"
 
 ### 6.2 Build experience brief
 
@@ -167,7 +167,7 @@ This brief is included in the agent's CLAUDE.md template (injected by WorktreeCr
 ### 6.3 Compute pre-spawn values deterministically
 
 ```bash
-REPO_HASH=$(git -C <project-root> rev-parse --show-toplevel | md5sum | cut -c1-7)
+REPO_HASH=$(git -C <project-root> rev-parse --show-toplevel | shasum | cut -c1-7)
 WORKTREE_PATH="$HOME/.claude/darwin-worktrees/$REPO_HASH/<task-slug>"
 SIGNAL_PATH="$HOME/.claude/darwin-state/$REPO_HASH/<task-slug>/signal.json"
 AGENT_NAME="<task-slug>-attempt-<N>"   # N = attempt_count + 1
@@ -317,12 +317,12 @@ git -C "$WORKTREE_PATH" commit --allow-empty -m \
 
 # Immediately follow with rollback (real inverse-diff commit, never empty)
 git -C "$WORKTREE_PATH" revert --no-edit HEAD
-ROLLBACK_SHA=$(git -C "$WORKTREE_PATH" rev-parse HEAD)
 git -C "$WORKTREE_PATH" commit --amend --no-edit \
   --trailer "Try-Status: rollback" \
   --trailer "Task: <slug>" \
   --trailer "Reset-From: <fail-sha>" \
   --trailer "Reset-To: <base-sha>"
+ROLLBACK_SHA=$(git -C "$WORKTREE_PATH" rev-parse HEAD)
 ```
 
 ### 6.11 Check circuit breakers
@@ -433,7 +433,7 @@ Total tokens (this session):
 ```
 
 If any task is `⊖` (HANDOFF):
-1. Write `HANDOFF.md` in the project root with the following sections:
+1. Write `HANDOFF.md` in the agent's worktree path (from `[task-state].worktree_path`) with the following sections:
    - **Header:** task slug, pairing name, branch, last commit SHA, models used across all attempts
    - **Trigger:** trigger reason (one of: circuit-breaker exhausted / ladder exhausted / needs-human / upstream-constraint with upstream slug)
    - **What this task was trying to do:** the original task description from the asset `.adoc`

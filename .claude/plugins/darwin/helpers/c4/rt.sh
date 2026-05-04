@@ -10,7 +10,7 @@ if [ ! -f "$RUNTIME_JSON" ]; then
   if command -v bun &>/dev/null; then
     EXEC="bun"
     PM="bun"
-  elif command -v node &>/dev/null && node --version 2>/dev/null | grep -qE '^v(2[0-9]|[3-9][0-9])'; then
+  elif command -v node &>/dev/null && node --version 2>/dev/null | grep -qE '^v([2-9][0-9]|[1-9][0-9]{2,})'; then
     EXEC="node"
     PM="npm"
   else
@@ -28,7 +28,7 @@ shift || true
 case "$CMD" in
   install)  cd "$SCRIPT_DIR" && "$PM" install "$@" ;;
   build)    cd "$SCRIPT_DIR" && "$PM" run build "$@" ;;
-  test)     cd "$SCRIPT_DIR" && "$PM" run test "$@" ;;
+  test)     cd "$SCRIPT_DIR" && "$PM" run test -- "$@" ;;
   run)      cd "$SCRIPT_DIR" && "$PM" run "$@" ;;
   *)        echo "Usage: rt.sh install|build|test|run [args...]" >&2; exit 1 ;;
 esac

@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'url';
+
 export interface TokenSnapshot {
   input: number;
   output: number;
@@ -19,11 +21,13 @@ export function computeDelta(before: TokenSnapshot, after: TokenSnapshot): Token
 }
 
 // CLI entry point: reads JSON array [before, after] from stdin, writes delta to stdout
-const chunks: Buffer[] = [];
-process.stdin.on('data', (c: Buffer) => chunks.push(c));
-process.stdin.on('end', () => {
-  const [before, after] = JSON.parse(
-    Buffer.concat(chunks).toString('utf8')
-  ) as [TokenSnapshot, TokenSnapshot];
-  process.stdout.write(JSON.stringify(computeDelta(before, after)) + '\n');
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const chunks: Buffer[] = [];
+  process.stdin.on('data', (c: Buffer) => chunks.push(c));
+  process.stdin.on('end', () => {
+    const [before, after] = JSON.parse(
+      Buffer.concat(chunks).toString('utf8')
+    ) as [TokenSnapshot, TokenSnapshot];
+    process.stdout.write(JSON.stringify(computeDelta(before, after)) + '\n');
+  });
+}

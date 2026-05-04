@@ -14,7 +14,7 @@ The sparse-workflow controller ships as a Claude Code plugin. Claude Code IS the
 ├── hooks/
 │   ├── hooks.json                # registers WorktreeCreate + SubagentStop
 │   ├── worktree-create.sh        # sparse checkout, .claude/ injection, skip-worktree
-│   └── subagent-stop.sh          # writes signal to ~/.claude/scaffold-state/<session_id>/signal.json
+│   └── subagent-stop.sh          # writes signal to ~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json
 └── helpers/c4/
     ├── detect-runtime.sh         # Bun → Node 20+ → Deno; writes runtime.json
     ├── rt.sh                     # thin wrapper: delegates to detected pm
@@ -67,13 +67,16 @@ The hook receives the planned worktree path on stdin JSON. It:
 
 **`SubagentStop`** — signal hook only.
 
-Receives `session_id`, `cwd`, `transcript_path`, `agent_id` on stdin JSON. Writes:
+Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives the signal key from `cwd` by stripping the worktree base prefix:
 
-```json
-{ "session_id": "...", "cwd": "/abs/path/to/worktree", "agent_id": "..." }
+```
+cwd:         ~/.claude/scaffold-worktrees/a3f9c1/auth-rs256
+signal path: ~/.claude/scaffold-state/a3f9c1/auth-rs256/signal.json
 ```
 
-to `~/.claude/scaffold-state/<session_id>/signal.json` (outside the worktree so it survives cleanup). Does not decide outcome — the controller reads the signal and drives all decisions.
+One signal path per task (not per session), so concurrent tasks on distinct branches never collide. The path is pre-computable by the controller before spawning and is stored in `[task-state]` as `signal_path`. Does not decide outcome — the controller reads the signal and drives all decisions.
+
+Note: `session_id` in the hook input is the **parent** controller's session ID, not the subagent's. The subagent's own session ID is not exposed by the hook. The `name:` frontmatter field (set to `<task-slug>-attempt-<N>`) may equal `agent_id` in the hook input, but this mapping is not confirmed in the Claude Code documentation; signal routing uses `cwd`-derived paths, not `agent_id`.
 
 **Sandbox configuration** injected per-task:
 
@@ -150,23 +153,28 @@ Derives: attempt count, current tier, Pairing-Hash (verified against on-disk pai
 **Loop kernel (per task):**
 
 ```
-1. Load pairing → verify Pairing-Hash
-2. Build experience brief from fail trailers
-3. Compute worktree_path deterministically: ~/.claude/scaffold-worktrees/<repo-hash>/<task-slug>/
-4. Write status: running + session_id + worktree_path to [task-state]   ← crash-recovery commit point
-5. WorktreeCreate hook → creates worktree at that path; sparse checkout + .claude/ injection
-6. Spawn subagent (Agent tool, fresh invocation — blocks until subagent stops)
-7. SubagentStop hook fires → writes signal to ~/.claude/scaffold-state/<session_id>/signal.json
-8. Controller reads signal → snapshot staged diff (git diff --staged in worktree)
-9. Run eval pipeline in isolated sandbox (cheapest-first, declared order)
-10. Verdict:
+1.  Load pairing → verify Pairing-Hash
+2.  Build experience brief from fail trailers
+3.  Compute deterministically (before spawning):
+      worktree_path = ~/.claude/scaffold-worktrees/<repo-hash>/<task-slug>/
+      signal_path   = ~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json
+      agent_name    = <task-slug>-attempt-<N>
+4.  Write status: running + agent_name + worktree_path + signal_path to [task-state]
+                                                        ← crash-recovery commit point
+5.  Set name: agent_name in agent frontmatter (for observability in transcripts/logs)
+6.  WorktreeCreate hook → creates worktree at worktree_path; sparse checkout + .claude/ injection
+7.  Spawn subagent (Agent tool, fresh invocation — blocks until subagent stops)
+8.  SubagentStop hook fires → derives signal_path from cwd; writes signal file
+9.  Controller reads signal → snapshot staged diff (git diff --staged in worktree)
+10. Run eval pipeline in isolated sandbox (cheapest-first, declared order)
+11. Verdict:
       pass  → commit ● + trailers → update [task-state] → done
       fail  → commit ⊗ + ↺ → check circuit breakers → retry/escalate/widen/HANDOFF
 ```
 
 **Crash and resume recovery:**
 
-| [task-state] on resume | Signal file? | Staged changes? | Recovery action |
+| [task-state] on resume | Signal at `signal_path`? | Staged changes in `worktree_path`? | Recovery action |
 |---|---|---|---|
 | `status: running` | yes | — | Process signal; run eval; commit. Do not re-spawn. |
 | `status: running` | no | yes | Run eval on staged diff; commit result. |

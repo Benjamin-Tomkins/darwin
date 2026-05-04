@@ -1011,15 +1011,20 @@ log itself a forensic record of what was judged.
 
 `status: running` is written to `[task-state]` **before** the Agent tool is
 called, so a controller crash at any point during or after spawn is
-detectable on resume. The `session_id` identifies the signal file;
-`worktree_path` is the absolute path for diff inspection.
+detectable on resume. `agent_name` (`<task-slug>-attempt-<N>`) is set in
+the agent frontmatter's `name:` field for observability in transcripts and
+logs; `worktree_path` and `signal_path` are the absolute paths for diff
+inspection and resume. The signal path is derived from `worktree_path` —
+not from the session ID or agent ID — so it is pre-computable and collision-free
+across concurrent tasks.
 
 ```asciidoc
 [task-state]
 ----
 status: running
-session_id: 7048d3c0-4798-4dd8-89d2-5b45a6a232ff
+agent_name: auth-rs256-attempt-4
 worktree_path: /Users/alice/.claude/scaffold-worktrees/a3f9c1/auth-rs256
+signal_path: /Users/alice/.claude/scaffold-state/a3f9c1/auth-rs256/signal.json
 last_attempt: 4
 branch: agent/auth-rs256
 ladder_id: 2026-05-03T14:22:00Z
@@ -1350,7 +1355,7 @@ Git is authoritative. Recovery rules:
 | `Ladder-Id` mismatch (model deprecated) | Historical commits remain valid; current tier resolved via current ladder |
 | Pairing referenced in trailer no longer exists | Block; require pairing to be restored or re-mapped |
 | `Pairing-Hash` mismatch between branch and on-disk pairing | Block with `needs-human`; pairing was edited mid-run; restore pinned version or human-approved migration to new pairing on a new branch |
-| `[task-state]` shows `status: running` AND signal file exists at `~/.claude/scaffold-state/<session_id>/signal.json` | Controller crashed after subagent finished but before eval ran. Do NOT re-spawn. Snapshot staged diff from `worktree_path`; re-run eval pipeline; commit result normally. |
+| `[task-state]` shows `status: running` AND signal file exists at `signal_path` | Controller crashed after subagent finished but before eval ran. Do NOT re-spawn. Snapshot staged diff from `worktree_path`; re-run eval pipeline; commit result normally. |
 | `[task-state]` shows `status: running` AND no signal file AND worktree has staged changes | Both controller and subagent crashed; agent had work in progress. Treat staged diff as the agent's output: re-run eval pipeline. On pass commit ●; on fail commit ⊗ + ↺ and retry. |
 | `[task-state]` shows `status: running` AND no signal file AND worktree is clean | Controller crashed before or during spawn, or subagent crashed immediately without producing output. Discard worktree contents, reset `[task-state]` to `status: ◌`, retry attempt at same tier. |
 | Controller session context limit reached mid-loop | Controller updates all open `[task-state]` blocks to their current status, emits a checkpoint message, and stops. User re-invokes `/scaffold-worktree` to continue; new session reconstructs state from Git and `[task-state]`. |
@@ -1448,7 +1453,7 @@ file so the agent's local modifications do not propagate to other branches.
 |------|-------|---------|
 | `WorktreeCreate` | parent | Replaces git default (`.worktreeinclude` is NOT processed when this hook is registered — hook processes it manually). Hook: creates worktree, applies sparse checkout from `pairing.scope.readonly_globs + writable_globs`, runs validation closure, injects `.claude/` (settings, agent definition, CLAUDE.md) from pairing-specific templates, runs `git update-index --skip-worktree` on each injected file so agent edits stay local. Returns absolute worktree path on stdout. |
 | `PreToolUse:Edit`/`PreToolUse:Write` | agent | Enforces writable allowlist + protected tag regions. Allowlist comes from pairing's `scope.writable_globs`. |
-| `SubagentStop` | parent (signal) | Receives `session_id`, `cwd`, `transcript_path`, `agent_id` on stdin JSON. Writes signal to `~/.claude/scaffold-state/<session_id>/signal.json` (outside worktree). Uses `cwd` from stdin to identify the worktree. Does not decide outcome — controller reads signal and drives the loop. |
+| `SubagentStop` | parent (signal) | Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives signal key from `cwd`: strips `~/.claude/scaffold-worktrees/` prefix to obtain `<repo-hash>/<task-slug>`. Writes signal to `~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json` (outside worktree; one path per task, not per session, so concurrent tasks on distinct branches never collide). Does not decide outcome — controller reads signal and drives the loop. |
 
 ---
 
@@ -1458,7 +1463,7 @@ The agent template in the pairing produces this:
 
 ```yaml
 ---
-name: <pairing.agent.template>-<task-slug>
+name: <task-slug>-attempt-<N>
 description: <from pairing.description>
 model: <set by parent at spawn time from ladder>
 tools: [<from pairing.agent.tools.allow>]
@@ -1585,7 +1590,7 @@ This prevents:
 | R1.7 | `[task-state]` is reconcilable from Git on resume; Git authoritative | Must |
 | R1.8 | `[IMPORTANT]` blocks default to starting at tier 2 (decoupled from `permissionMode`) | Should |
 | R1.9 | `depends_on:` lists in `[task]` block drive dependency graph ordering | Should |
-| R1.10 | `[task-state]` fields `session_id` and `worktree_path` are written atomically with `status: running` before the Agent tool is called; these fields are cleared (or overwritten) on each new spawn attempt | Must |
+| R1.10 | `[task-state]` fields `agent_name`, `worktree_path`, and `signal_path` are written atomically with `status: running` before the Agent tool is called; these fields are overwritten on each new spawn attempt. `agent_name` is `<task-slug>-attempt-<N>`; `signal_path` is derived from `worktree_path` as `~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json`. | Must |
 
 ### R2 — Worktree creation
 
@@ -1677,7 +1682,7 @@ This prevents:
 | R7.16 | Concurrent task evaluation is permitted only across distinct `agent/<slug>` branches; two attempts on the same branch are never in flight simultaneously | Must |
 | R7.17 | First commit on an `agent/<slug>` branch records `Pairing-Hash` (SHA-256 of canonicalised pairing YAML); all subsequent commits on that branch must carry the same `Pairing-Hash`. The branch is pinned to that pairing version for its lifetime. | Must |
 | R7.18 | If the on-disk pairing YAML hashes differently from the branch's `Pairing-Hash` mid-run, the task halts with `failure_class: needs-human` and HANDOFF naming the hash mismatch. Pairings are immutable per task instance. | Must |
-| R7.19 | Before invoking the Agent tool, controller writes `status: running`, `session_id`, and `worktree_path` to the task's `[task-state]` block. This is the crash-recovery commit point: any later interruption leaves detectable state. | Must |
+| R7.19 | Before invoking the Agent tool, controller writes `status: running`, `agent_name` (`<task-slug>-attempt-<N>`), `worktree_path`, and `signal_path` to the task's `[task-state]` block. Sets the agent definition's `name:` field to `agent_name`. This is the crash-recovery commit point: any later interruption leaves detectable state. | Must |
 | R7.20 | Controller monitors approximate context token usage after each task completion. At 80% of the session context limit, it finishes the current task, updates all open `[task-state]` blocks to their latest status, and emits a checkpoint message instructing the user to re-invoke `/scaffold-worktree` to continue. The following session reconstructs full state from Git trailers and `[task-state]`. | Must |
 
 ### R8 — Crash recovery
@@ -1687,7 +1692,7 @@ This prevents:
 | R8.1 | Git is the authoritative state source; the controller can rebuild any task's runtime state from `agent/<slug>` branch trailers without consulting external storage | Must |
 | R8.2 | On resume, controller applies the recovery-rules table from the "Crash Recovery" section above; cases not covered by the table are escalated as `needs-human` | Must |
 | R8.3 | A worktree found dirty at a `↺` commit is not auto-repaired; the controller blocks and surfaces a HANDOFF | Must |
-| R8.4 | On resume, for every task with `status: running` in `[task-state]`, the controller checks for a signal file at `~/.claude/scaffold-state/<session_id>/signal.json` before deciding whether to re-spawn | Must |
+| R8.4 | On resume, for every task with `status: running` in `[task-state]`, the controller checks for a signal file at the `signal_path` recorded in `[task-state]` (derived from `worktree_path`, never from session ID) before deciding whether to re-spawn | Must |
 | R8.5 | Signal file present on resume → treat as a pending SubagentStop; snapshot the staged diff from `worktree_path`; run eval pipeline; commit result. Do not re-spawn the subagent. | Must |
 | R8.6 | No signal file on resume → inspect worktree at `worktree_path` for staged changes. Staged changes present: run eval pipeline on them. Worktree clean: discard, reset `[task-state]` to `status: ◌`, and schedule a fresh retry at the same tier. | Must |
 
@@ -1697,7 +1702,7 @@ This prevents:
 |---|---|---|
 | R9.1 | Agent worktree sandbox is enabled with `allowUnsandboxedCommands: false` and `failIfUnavailable: true` (no silent fallback to unsandboxed execution) | Must |
 | R9.2 | Agent worktree scratch is limited to the paths declared in `sandbox.filesystem.allowWrite`; no additional scratch directory is provided. (`CLAUDE_CODE_TMPDIR` is not used — it does not apply to subagents spawned via the Agent tool.) | Must |
-| R9.3 | Controller signal state (`SubagentStop` output) is written to `~/.claude/scaffold-state/<session_id>/signal.json`, outside the worktree, so it survives worktree cleanup and is never staged. | Must |
+| R9.3 | Controller signal state (`SubagentStop` output) is written to `~/.claude/scaffold-state/<repo-hash>/<task-slug>/signal.json` (derived from `cwd`, not from session ID), outside the worktree, so it survives worktree cleanup, is never staged, and does not collide across concurrent tasks on distinct branches. | Must |
 | R9.4 | Eval sandbox is a separate environment from the agent worktree (R5.6); the two never share filesystem state | Must |
 
 ### R10 — Skill interface

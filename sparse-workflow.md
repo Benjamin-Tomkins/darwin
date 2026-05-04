@@ -1676,7 +1676,7 @@ This prevents:
 
 | | Requirement | Priority |
 |---|---|---|
-| R10.1 | `/scaffold-init` initialises project, validates pairings | Must |
+| R10.1 | `/scaffold-init` initialises project, validates pairings, detects JS runtime (`bun` → `node` 20+ → `deno`) and stores result in `~/.claude/scaffold-state/runtime.json`; blocks if no supported runtime found | Must |
 | R10.2 | `/scaffold-worktree <plan.adoc> [--base <ref>] [--resume <slug>]` invokes parent controller | Must |
 | R10.3 | `/scaffold-worktree` reads `[task]` and `[task-state]` from plan.adoc; loads pairing | Must |
 | R10.4 | Unordered tasks fan out concurrently; ordered/dependent tasks sequence on completion | Must |
@@ -1749,6 +1749,7 @@ The controller can drive plans encoded in the C4 plan format (see `docs/superpow
 | Constraint | Detail |
 |---|---|
 | Git version | 2.32+ (`git interpret-trailers --parse`) |
+| JS runtime | Bun, Node.js 20+, or Deno; detected by `/scaffold-init`, stored in `~/.claude/scaffold-state/runtime.json`. Bun and Node support build + execution; Deno is execution-only (pre-compiled ESM helpers only). |
 | Sandbox availability | bubblewrap on Linux/WSL2, Seatbelt on macOS; Windows not supported |
 | Hook timing | Sparse checkout, `.worktreeinclude` processing, `.claude/` injection, `git update-index --skip-worktree` in `WorktreeCreate` only |
 | Hook scope | `WorktreeCreate` REPLACES Claude Code's git default |

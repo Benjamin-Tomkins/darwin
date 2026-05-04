@@ -9,5 +9,23 @@
   },
   "enabledPlugins": {
     "darwin@darwin-local": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(jq *)",
+      "Bash(date *)",
+      "Bash(bun *)",
+      "Bash(node *)",
+      "Bash(deno *)",
+      "Bash(cat ~/.claude/*)",
+      "Bash(cat ~/.claude/**)",
+      "Bash(ls ~/.claude/*)",
+      "Bash(ls -l ~/.claude/*)",
+      "Bash(cat .claude/darwin-pairings/**)",
+      "Bash(ls .claude/darwin-pairings/**)",
+      "Bash(bash *.claude/plugins/darwin/**)",
+      "Bash(PLUGIN=* && bash *)"
+    ]
   }
 }

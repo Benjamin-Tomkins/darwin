@@ -16,6 +16,10 @@ SIGNAL_BASE="$HOME/.claude/darwin-state"
 
 # Derive <repo-hash>/<task-slug> from cwd
 RELATIVE="${CWD#"$WORKTREE_BASE/"}"
+if [ "$RELATIVE" = "$CWD" ]; then
+  echo "subagent-stop: cwd '$CWD' is not inside WORKTREE_BASE '$WORKTREE_BASE'" >&2
+  exit 1
+fi
 SIGNAL_DIR="$SIGNAL_BASE/$RELATIVE"
 mkdir -p "$SIGNAL_DIR"
 
@@ -27,17 +31,14 @@ AGENT_OUTPUT=0
 AGENT_THINKING=0
 
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
-  while IFS= read -r line; do
-    has_usage=$(printf '%s' "$line" | jq 'has("usage")' 2>/dev/null || echo "false")
-    if [ "$has_usage" = "true" ]; then
-      inp=$(printf '%s' "$line" | jq '.usage.input_tokens    // 0')
-      out=$(printf '%s' "$line" | jq '.usage.output_tokens   // 0')
-      think=$(printf '%s' "$line" | jq '.usage.thinking_tokens // 0')
-      AGENT_INPUT=$(( AGENT_INPUT   + inp   ))
-      AGENT_OUTPUT=$(( AGENT_OUTPUT  + out   ))
-      AGENT_THINKING=$(( AGENT_THINKING + think ))
-    fi
-  done < "$TRANSCRIPT_PATH"
+  TOTALS=$(jq -s '{
+    input:    ([.[] | select(has("usage")) | .usage.input_tokens    // 0 | floor] | add // 0),
+    output:   ([.[] | select(has("usage")) | .usage.output_tokens   // 0 | floor] | add // 0),
+    thinking: ([.[] | select(has("usage")) | .usage.thinking_tokens // 0 | floor] | add // 0)
+  }' "$TRANSCRIPT_PATH")
+  AGENT_INPUT=$(printf '%s' "$TOTALS" | jq '.input')
+  AGENT_OUTPUT=$(printf '%s' "$TOTALS" | jq '.output')
+  AGENT_THINKING=$(printf '%s' "$TOTALS" | jq '.thinking')
 fi
 
 # Write signal.json — controller reads this after SubagentStop fires.

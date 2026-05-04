@@ -14,6 +14,12 @@ WORKTREE_PATH="$WORKTREE_BASE/$TEST_REPO/$TEST_SLUG"
 TRANSCRIPT_FILE="$(mktemp /tmp/transcript-XXXXX.jsonl)"
 SIGNAL_PATH="$SIGNAL_BASE/$TEST_REPO/$TEST_SLUG/signal.json"
 
+cleanup() {
+  rm -f "$TRANSCRIPT_FILE"
+  rm -rf "$SIGNAL_BASE/$TEST_REPO" "$WORKTREE_BASE/$TEST_REPO"
+}
+trap cleanup EXIT
+
 mkdir -p "$WORKTREE_PATH"
 
 # Write a mock transcript with three API turns carrying usage
@@ -48,10 +54,5 @@ agent_thinking=$(jq '.agent_tokens.thinking' "$SIGNAL_PATH")
 
 cwd_in_signal=$(jq -r '.cwd' "$SIGNAL_PATH")
 [ "$cwd_in_signal" = "$WORKTREE_PATH" ] || fail "cwd mismatch in signal.json"
-
-# ── Cleanup ────────────────────────────────────────────────────────────────
-rm -f "$TRANSCRIPT_FILE"
-rm -rf "$SIGNAL_BASE/$TEST_REPO"
-rmdir "$WORKTREE_PATH" 2>/dev/null || true
 
 echo "PASS: subagent-stop.sh"

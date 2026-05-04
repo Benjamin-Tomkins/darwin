@@ -37,7 +37,7 @@ FLAGS=$(jq -r '.run_flags // [] | join(" ")' ~/.claude/darwin-state/runtime.json
 PLUGIN="$(git rev-parse --show-toplevel)/.claude/plugins/darwin"
 ```
 
-Parse `index.adoc` into an element tree:
+Parse `index.adoc` into an element tree. If `--c4 <plan-dir>` was passed, the file argument is `<plan-dir>/index.adoc`; otherwise it is the literal `<plan.adoc>` argument:
 ```bash
 $EXEC $FLAGS $PLUGIN/helpers/c4/bin/parse-index.js --file <plan.adoc>
 ```
@@ -63,7 +63,9 @@ If `pairing` is absent from the `[task]` block, infer it:
 | SoftwareSystem, Container, Component | `impl` | `implementer-with-tests` |
 | any | `tests` | `test-author-with-meta-rubric` |
 | any | `bdd` | `test-author-with-meta-rubric` |
-| SoftwareSystem | `detail` | `doc-writer-with-checks` |
+| any | `detail` | `doc-writer-with-checks` |
+
+Resolve the pairing name by reading `.claude/darwin-pairings/<pairing-name>/pairing.yaml` from the repo root. If the file does not exist, halt with: `Pairing '<name>' not found in .claude/darwin-pairings/. Create the pairing file or run /darwin-init.`
 
 ---
 
@@ -84,7 +86,9 @@ Construct a queue of (element, property-key) task tuples:
 
 Skip any task whose asset branch already has `Try-Status: pass` as its latest non-rollback commit.
 
-If `--resume <slug>` was passed, only include the named task and its dependents.
+If `--resume <slug>` was passed, verify the slug exists in ELEMENT_TREE. If not found, halt with: `Resume slug '<slug>' not found in plan. Check for slug renames or typos.` If found, include only the named task and its dependents.
+
+If the queue is empty after applying all filters, report `No tasks to run — all tasks are already ●` and stop.
 
 ---
 
@@ -103,7 +107,7 @@ Then read Git trailer history from the task's branch:
 ```bash
 BRANCH=$(... branch-name output ...)
 git log "$BRANCH" \
-  --format='%(trailers:key=Try-Status,key=Tier,key=Pairing-Hash,key=Eval-Id,key=Failure-Class,key=Attempt,key=Problem,key=Hypothesis,key=Evidence)' \
+  --format='%H%n%(trailers:key=Try-Status,key=Tier,key=Pairing-Hash,key=Eval-Id,key=Failure-Class,key=Attempt,key=Problem,key=Hypothesis,key=Evidence)' \
   2>/dev/null
 ```
 
@@ -114,6 +118,6 @@ Derive:
 - `pairing_hash` — `Pairing-Hash` from the latest commit.
 - `experience_brief` — ordered list of all `fail` trailer sets (problem, hypothesis, evidence); excludes rollback, infra-fail, widen commits.
 
-**Pairing-Hash verification (R7.18):** After loading the resolved pairing YAML (from Step 2), compute SHA-256 of its canonicalised content and compare against `pairing_hash`. If they differ and no `Phase-Transition: true` is present on the latest commit, halt with: "Pairing-hash drift detected on `<branch>`. Pairing may have changed mid-run. Resolve manually before resuming."
+**Pairing-Hash verification (R7.18):** After loading the resolved pairing YAML (from Step 2), compute SHA-256 of the pairing YAML with keys sorted alphabetically and whitespace normalised (per R0.10 — sorted keys, normalised whitespace) and compare against `pairing_hash`. If they differ and no `Phase-Transition: true` is present on the latest commit, halt with: "Pairing-hash drift detected on `<branch>`. Pairing may have changed mid-run. Resolve manually before resuming."
 
-Also read `[task-state]` from the plan `.adoc` file for crash-recovery fields (`signal_path`, `worktree_path`, `agent_name`).
+Also read `[task-state]` from the asset `.adoc` file for this task (the same file read in Step 2 for this element/property-key pair) for crash-recovery fields (`signal_path`, `worktree_path`, `agent_name`).

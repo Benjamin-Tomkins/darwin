@@ -6,21 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_JSON="${HOME}/.claude/darwin-state/runtime.json"
 
 if [ ! -f "$RUNTIME_JSON" ]; then
-  # Fallback: detect inline if runtime.json not yet written
-  if command -v bun &>/dev/null; then
-    EXEC="bun"
-    PM="bun"
-  elif command -v node &>/dev/null && node --version 2>/dev/null | grep -qE '^v([2-9][0-9]|[1-9][0-9]{2,})'; then
-    EXEC="node"
-    PM="npm"
-  else
-    echo "No supported runtime found. Run /darwin-init first." >&2
-    exit 1
-  fi
-else
-  EXEC=$(jq -r '.exec' "$RUNTIME_JSON")
-  PM=$(jq -r '.pm' "$RUNTIME_JSON")
+  bash "$SCRIPT_DIR/detect-runtime.sh"
 fi
+EXEC=$(jq -r '.exec' "$RUNTIME_JSON")
+PM=$(jq -r '.pm' "$RUNTIME_JSON")
 
 CMD="${1:-}"
 shift || true

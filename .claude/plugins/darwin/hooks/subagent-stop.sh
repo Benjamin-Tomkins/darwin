@@ -31,11 +31,15 @@ AGENT_OUTPUT=0
 AGENT_THINKING=0
 
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
-  TOTALS=$(jq -s '{
-    input:    ([.[] | select(has("usage")) | .usage.input_tokens    // 0 | floor] | add // 0),
-    output:   ([.[] | select(has("usage")) | .usage.output_tokens   // 0 | floor] | add // 0),
-    thinking: ([.[] | select(has("usage")) | .usage.thinking_tokens // 0 | floor] | add // 0)
-  }' "$TRANSCRIPT_PATH")
+  # Use reduce + inputs rather than -s to avoid slurping the entire transcript into memory.
+  TOTALS=$(jq -n 'reduce inputs as $line (
+    {input: 0, output: 0, thinking: 0};
+    if ($line | has("usage")) then
+      .input    += ($line.usage.input_tokens    // 0 | floor) |
+      .output   += ($line.usage.output_tokens   // 0 | floor) |
+      .thinking += ($line.usage.thinking_tokens // 0 | floor)
+    else . end
+  )' "$TRANSCRIPT_PATH")
   AGENT_INPUT=$(printf '%s' "$TOTALS" | jq '.input')
   AGENT_OUTPUT=$(printf '%s' "$TOTALS" | jq '.output')
   AGENT_THINKING=$(printf '%s' "$TOTALS" | jq '.thinking')

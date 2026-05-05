@@ -649,18 +649,108 @@ class DarwinCommitLog {
 
 ---
 
+### `PlanGraph`
+
+`PlanGraph` is the unified queryable model of the full project state. It holds two orthogonal axes:
+
+- **Intent tree** — the C4 hierarchy parsed from `index.adoc` and its linked asset `.adoc` files. Each node carries the current understanding of what that part of the system is supposed to do, expressed at progressively finer resolution (softwareSystem → container → component). The tree evolves as the design evolves: nodes are added, detail files deepen, `bdd` specs sharpen. `index.adoc` is genuinely low-resolution — it states the problem space in DSL terms without implementation detail — and depth encodes resolution of understanding.
+
+- **Evidence ledger** — the `DarwinCommit[]` array attached to each node. Each entry is a timestamped, reasoned record of what was tried against that node's intent and what was learned. Nodes accumulate evidence independently of the intent tree's evolution.
+
+The two axes are independent: you can deepen the intent (add a new container to the plan) without running experiments, and you can accumulate evidence without changing the design. The **relationship** between them is what the Controller reads to decide what to do next.
+
+**Convergence criterion:** A leaf node is *resolved* when its evidence ledger contains at least one high-confidence passing `DarwinCommit` that was generated against the node's current intent file content (matched by the `eval_commit` SHA pointing to the asset `.adoc` at the time the experiment ran). A non-leaf node is resolved when all its children are resolved. The design is *stable* when the root node is resolved — every part of the intent tree has been successfully validated by evidence.
+
+**Construction modes.** The graph has an internal `_mode` flag — `'reconstructing'` or `'live'` — that controls side-effect behaviour:
+
+- `PlanGraph.fromRef(ref, repoPath)` sets `_mode = 'reconstructing'`. All parsing and node construction is silent: no debug log entries are emitted, no git writes occur. This is the session-resume path — the graph rebuilds itself from the git ledger without producing duplicate log entries.
+- `_mode` flips to `'live'` automatically on the first call to any mutating method. Once live, every state transition emits a debug log entry (via `darwin_debug`) and performs its git operation before returning. The flip is one-way within a session: once live, the graph stays live.
+- `PlanGraph.fromRef(ref, repoPath, { debug: true })` reconstructs silently but re-emits all log entries with a `reconstructed:` prefix — used only for validating that `fromRef()` produces an object consistent with what was originally committed.
+
+**The LLM does not interact with git.** All git operations (reading `.adoc` files at a ref, reading the commit log, staging files, committing ADRs, writing `running.json`) are encapsulated inside `PlanGraph` and `DarwinCommit`. The Controller receives a `PlanGraph` instance and calls methods on it; it has no awareness of git commands or file paths.
+
+**In-flight state.** Between an experiment starting and its ADR commit landing, the graph writes a `running.json` to `$SIGNAL_BASE/<repo-hash>/<task-slug>/running.json` on the first live mutating call for that node. This file is deleted when `recordExperiment()` commits the ADR. On `fromRef()`, if `running.json` exists for a node, that node is marked `status: 'running'` in the reconstructed graph — allowing a resumed session to detect and handle experiments that were in progress when the session terminated.
+
+```typescript
+// Node types mirror the C4 hierarchy
+type PlanNodeType = 'softwareSystem' | 'container' | 'component';
+type NodeStatus = 'unstarted' | 'running' | 'resolved' | 'contested' | 'stale';
+// resolved   = high-confidence passing ADR against current intent
+// contested  = conflicting ADRs (mix of pass/fail at high confidence)
+// stale      = passing ADR exists but was run against an older version of the intent file
+
+interface PlanNode {
+  identifier: string;          // from DSL identifier property
+  displayName: string;         // from DSL quoted name
+  type: PlanNodeType;
+  description: string;
+  assets: Record<string, string>;  // asset key → .adoc filename (impl, tests, bdd, detail)
+  pairing?: string;
+  children: PlanNode[];        // containers inside softwareSystem, components inside container
+  evidence: DarwinCommit[];    // ADR commits for this node, chronological
+  status: NodeStatus;          // derived from evidence vs current intent
+  intentSha: string;           // git SHA at which this node's asset files were last read
+}
+
+class PlanGraph {
+  // Construction — silent reconstruction from git; _mode starts as 'reconstructing'
+  static fromRef(
+    ref: string,
+    repoPath: string,
+    opts?: { debug?: boolean }
+  ): Promise<PlanGraph>
+
+  // Read-only navigation (never trigger mode flip)
+  get root(): PlanNode
+  node(identifier: string): PlanNode | undefined
+  path(branchPath: string): PlanNode[]         // e.g. "greeter/impl" → [softwareSystem, container]
+  leaves(): PlanNode[]                         // all nodes with no children
+  byStatus(status: NodeStatus): PlanNode[]
+  unresolved(): PlanNode[]                     // nodes where evidence doesn't cover current intent
+  contested(): PlanNode[]
+  stale(): PlanNode[]                          // intent updated after last passing ADR
+
+  // Context generation for Controller prompt (read-only, no mode flip)
+  contextSummary(node?: PlanNode): string      // intent + evidence narrative for Opus prompt
+
+  // Mutating methods — each flips _mode to 'live' on first call, then emits debug log + git op
+  async markRunning(branchPath: string): Promise<void>
+    // writes running.json; emits: { hook: 'plan-graph', message: 'node:running <branchPath>' }
+
+  async recordExperiment(
+    branchPath: string,
+    commit: DarwinCommit
+  ): Promise<void>
+    // attaches commit to node.evidence; updates node.status; deletes running.json;
+    // emits: { hook: 'plan-graph', message: 'node:evidence-attached <branchPath> status=<status>' }
+
+  async updateIntent(
+    branchPath: string,
+    newContent: string,
+    stagedFiles: string[]
+  ): Promise<string>
+    // writes updated asset .adoc; commits; marks dependent evidence as stale;
+    // returns new SHA; emits: { hook: 'plan-graph', message: 'node:intent-updated <branchPath>' }
+}
+```
+
+---
+
 ## File Layout
 
 ```
 helpers/eval-harness/
   src/
-    types.ts               — all interfaces: Hypothesis, ADR, DarwinCommitMeta, CommitRecord
+    types.ts               — Zod schemas + inferred types: Hypothesis, ADR, DarwinCommitMeta,
+                             PlanNode, NodeStatus, ExperimentMeta, Verdict, Edit, TokenCount
     DarwinCommit.ts        — class: one experiment commit; serialise/parse; git write
-    DarwinCommitLog.ts     — class: git range → CommitRecord[]; filter/group/summarise
-    controller.ts          — Experiment Controller (Opus outer loop)
+    DarwinCommitLog.ts     — class: git range → DarwinCommit[]; filter/group/summarise
+    PlanGraph.ts           — class: intent tree + evidence ledger; construction modes;
+                             contextSummary; mutating methods that own all git + log ops
+    controller.ts          — Experiment Controller (Opus outer loop); calls PlanGraph only
     runner.ts              — Experiment Runner (Sonnet middle loop)
     judge.ts               — Eval Judge (Opus: verdict, edit proposal, ADR write)
-    hypothesis.ts          — Hypothesis type + generator logic
+    hypothesis.ts          — Hypothesis type + generator logic (reads PlanGraph.unresolved())
   fixtures/
     plan-software/         — pre-built fixture specs for known scenarios
       single-container.json
@@ -669,6 +759,8 @@ helpers/eval-harness/
   tests/
     DarwinCommit.test.ts   — unit tests against fixture commit messages (no git required)
     DarwinCommitLog.test.ts
+    PlanGraph.test.ts      — unit tests: fromRef reconstruction, mode transitions,
+                             status derivation, contextSummary output shape
   package.json
   tsconfig.json
 
@@ -685,3 +777,9 @@ docs/darwin/adrs/          — materialized ADR view rendered from git log (not 
 - `evidence` strings in `verdict` are verbatim substrings of the artifact, consistent with Darwin's `evidence_quotes` pattern (R5.9a/R5.9b). The harness substring-checks them before accepting the verdict.
 - The outer Controller loop terminates on any circuit breaker condition before budget exhaustion; it never retries a failed hypothesis without modifying either the hypothesis or the Darwin source.
 - Darwin source edits proposed by the Judge are applied only to a **fresh worktree**, never to the main working tree directly. The edit reaches the main tree only after the re-run passes.
+- **`PlanGraph` owns all git and debug-log operations.** The Controller, Runner, and Judge have no git awareness; they call `PlanGraph` and `DarwinCommit` methods only.
+- **`PlanGraph._mode` is one-way.** Once flipped from `'reconstructing'` to `'live'`, it never reverts within a session. Read-only methods (`node()`, `contextSummary()`, `byStatus()`, etc.) never trigger the flip.
+- **Debug log entries are emitted exactly once per state transition.** `fromRef()` reconstruction emits nothing (or `reconstructed:`-prefixed entries in debug mode); the live mutating methods emit one entry per call. No LLM tool call is used for logging.
+- **`running.json` is the in-flight sentinel.** It is written by `markRunning()` and deleted by `recordExperiment()`. A `running.json` present at `fromRef()` time marks the node `status: 'running'` in the reconstructed graph — the Controller handles this as an interrupted experiment on resume.
+- **Node `status` is always derived, never stored.** `NodeStatus` is computed from `evidence[]` vs `intentSha` at read time; it is not persisted to disk or git. `running.json` is the only exception (in-flight signal, not status).
+- **Depth encodes resolution of understanding.** The intent tree mirrors the C4 levels: softwareSystem (problem space) → container (deployable units) → component (internal modules). The Controller works from leaves upward: resolving fine-grained uncertainties first and propagating confidence toward the root.

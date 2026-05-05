@@ -21,7 +21,7 @@ Both layers are sparse-workflow targets: each file evolves on its own Git
 branch; each commit on those branches captures a knowledge or decision
 step in the audit trail. The DSL drives task-file creation (a new element
 with a `properties { "detail" "..." }` reference means a new task
-workflow); branch hierarchy mirrors the DSL's C4 nesting via stable slug
+workflow); branch hierarchy mirrors the DSL's C4 nesting via stable identifier
 properties, with all index evolution serialised on a single canonical
 branch (R14.7) and assets evolving on per-asset branches.
 
@@ -70,11 +70,11 @@ There is exactly one `index.adoc` (at the project root). No sub-folders,
 no per-element index files. All structural relationships live in the DSL;
 all revision history lives in Git branches.
 
-Filenames are derived from the DSL element's `"slug"` property
-(R14.3 in `sparse-workflow.md`) and MUST be unique project-wide. Slugs
+Filenames are derived from the DSL element's `"identifier"` property
+(R14.3 in `sparse-workflow.md`) and MUST be unique project-wide. Identifiers
 are validated for uniqueness within a parent's children at parse time;
-the typical filename convention is `<slug>-<asset-key>.adoc` or just
-`<slug>.adoc` when only one asset key is in use.
+the typical filename convention is `<identifier>-<asset-key>.adoc` or just
+`<identifier>.adoc` when only one asset key is in use.
 ====
 
 == `index.adoc` anatomy
@@ -82,9 +82,9 @@ the typical filename convention is `<slug>-<asset-key>.adoc` or just
 [source,asciidoc]
 ------
 = <Project name>
-:slug: <project-slug>
+:identifier: <project-identifier>
 :phase: spec                              // index is always :phase: spec
-:branch: agent/<project-slug>/_index      // _index suffix; see R14.6
+:branch: agent/<project-identifier>/_index      // _index suffix; see R14.6
 :status: ◎
 :pairing: c4-context-designer             // optional; governs index evolution only
 
@@ -98,7 +98,7 @@ workspace "<Project name>" {
         // tag::actor-end-user[]
         endUser = person "End User" {
             properties {
-                "slug" "end-user"
+                "identifier" "end-user"
             }
         }
         // end::actor-end-user[]
@@ -106,23 +106,23 @@ workspace "<Project name>" {
         // tag::system[]
         platform = softwareSystem "<Project name>" {
             properties {
-                "slug" "<project-slug>"
+                "identifier" "<project-identifier>"
             }
             // tag::container-api[]
             api = container "API Server" {
                 technology "Fastify (TypeScript)"
                 properties {
-                    "slug"   "api"            // immutable; drives branch path
-                    "detail" "api-server.adoc"
+                    "identifier" "api"            // immutable; drives branch path
+                    "detail"     "api-server.adoc"
                 }
 
                 // tag::component-auth[]
                 authComp = component "Auth Middleware" {
                     technology "JWT verification"
                     properties {
-                        "slug"   "auth-middleware"
-                        "detail" "auth-middleware.adoc"
-                        "bdd"    "auth-bdd.adoc"
+                        "identifier" "auth-middleware"
+                        "detail"     "auth-middleware.adoc"
+                        "bdd"        "auth-bdd.adoc"
                     }
                 }
                 // end::component-auth[]
@@ -151,8 +151,8 @@ Notes on conventions:
   `// end::<name>[]` comments. These tagged regions are extracted by the
   controller via `include::index.adoc[tag=<name>]` (R14.14) when an asset
   needs the parent element's spec as readonly context.
-* Every workflow-spawning DSL element MUST declare an immutable `"slug"`
-  property (R14.3). Branch paths derive from the chain of slug properties
+* Every workflow-spawning DSL element MUST declare an immutable `"identifier"`
+  property (R14.3). Branch paths derive from the chain of identifier properties
   walking up the DSL; display names and DSL identifiers can change without
   breaking branches or filenames.
 * `properties { ... }` blocks on DSL elements point at sibling `.adoc`
@@ -160,10 +160,10 @@ Notes on conventions:
 * Header attributes track the index file's own sparse-workflow state.
   Note `:branch:` ends in `/_index` (R14.6).
 
-== Slug property and element-path derivation
+== Identifier property and element-path derivation
 
 Every DSL element that spawns workflows MUST declare an immutable
-`"slug"` property. The slug is the canonical identifier for that element
+`"identifier"` property. The identifier is the canonical name for that element
 across the format: it appears in the element's branch path, in derived
 filenames, and in the dotted `Task:` trailer.
 
@@ -171,21 +171,21 @@ filenames, and in the dotted `Task:` trailer.
 * **Uniqueness**: required to be unique within the parent's children.
   Validated by the controller at parse time; collisions are scaffold
   errors (R14.3).
-* **Immutability**: once an element has been committed with a `"slug"`,
-  the slug is part of the project's audit identity. Renaming it is a
+* **Immutability**: once an element has been committed with an `"identifier"`,
+  the identifier is part of the project's audit identity. Renaming it is a
   breaking change handled by R14.9 (rename lifecycle).
 * **DSL identifier independence**: `authComp = component "Auth Middleware"
-  { properties { "slug" "auth-middleware" } }` — the DSL identifier
-  (`authComp`), the display name (`"Auth Middleware"`), and the slug
-  (`auth-middleware`) are three independent identities. Only the slug is
+  { properties { "identifier" "auth-middleware" } }` — the DSL variable name
+  (`authComp`), the display name (`"Auth Middleware"`), and the identifier
+  (`auth-middleware`) are three independent identities. Only the identifier is
   load-bearing for branch / filename derivation. The other two can change
   freely.
 
 The **element path** for a DSL element is the dot-joined chain of
-ancestor slugs from the project root, exclusive of the element's own
-slug. E.g., for `authComp` (slug `auth-middleware`) inside `api` (slug
-`api`) inside the project (slug `notification-platform`), the element
-path is `api`. The full slug-chain is
+ancestor identifiers from the project root, exclusive of the element's own
+identifier. E.g., for `authComp` (identifier `auth-middleware`) inside `api`
+(identifier `api`) inside the project (identifier `notification-platform`), the
+element path is `api`. The full identifier chain is
 `notification-platform.api.auth-middleware`.
 
 Branch path: dot-to-slash translation:
@@ -242,11 +242,11 @@ Example multi-asset element:
 ----
 component "Auth Middleware" {
     properties {
-        "slug"   "auth-middleware"
-        "detail" "auth-middleware.adoc"
-        "bdd"    "auth-bdd.adoc"
-        "tests"  "auth-tests.adoc"
-        "impl"   "auth-impl.adoc"
+        "identifier" "auth-middleware"
+        "detail"     "auth-middleware.adoc"
+        "bdd"        "auth-bdd.adoc"
+        "tests"      "auth-tests.adoc"
+        "impl"       "auth-impl.adoc"
     }
 }
 ----
@@ -260,7 +260,7 @@ own branch and Ralph loop.
 |===
 | Key | Value | Used for
 
-| `slug`
+| `identifier`
 | Kebab-case identifier
 | Canonical immutable identity; required on every workflow-spawning
   element (R14.3); drives branch path and filename derivation

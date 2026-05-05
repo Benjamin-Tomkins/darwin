@@ -187,6 +187,26 @@ else
   fail "worktree-create: exits non-zero for non-darwin path"
 fi
 
+# ── 8. built-in pairing templates ────────────────────────────────────────
+
+echo ""
+echo "--- 8. built-in pairing templates"
+for p in implementer-with-tests test-author doc-writer; do
+  pf="$PLUGIN/pairings/$p/pairing.yaml"
+  if [ -f "$pf" ]; then
+    ok "built-in pairing: $p exists"
+    for field in name agent evals; do
+      if grep -q "^$field:" "$pf"; then
+        ok "built-in pairing $p: has $field field"
+      else
+        fail "built-in pairing $p: missing $field field"
+      fi
+    done
+  else
+    fail "built-in pairing: $p missing"
+  fi
+done
+
 # ── Summary ───────────────────────────────────────────────────────────────
 
 echo ""

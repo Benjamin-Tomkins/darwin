@@ -1,0 +1,20 @@
+name: doc-writer
+agent:
+  instructions: |
+    Write documentation for the task described in your CLAUDE.md under "== Detail".
+
+    Requirements:
+    - Be concise, accurate, and audience-appropriate
+    - Stage all documentation files: git add <paths>
+
+    Do NOT commit — the controller handles commits.
+    Work only within the sandbox-allowed paths.
+evals:
+  - id: has-staged-changes
+    type: command
+    command: "[ \"$(git diff --cached --name-only | wc -l | tr -d ' ')\" -gt 0 ]"
+    timeout: 10
+    on_fail:
+      problem: "No documentation files staged after agent run"
+      hypothesis: "Agent did not create any documentation files"
+      failure_class: validation-fail

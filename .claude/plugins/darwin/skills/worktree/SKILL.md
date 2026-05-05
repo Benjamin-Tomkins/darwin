@@ -99,7 +99,13 @@ If `pairing` is absent from the `[task]` block, infer it:
 | any | `bdd` | `test-author-with-meta-rubric` |
 | any | `detail` | `doc-writer-with-checks` |
 
-Resolve the pairing name by reading `.claude/darwin-pairings/<pairing-name>/pairing.yaml` from the repo root. If the file does not exist, halt with: `Pairing '<name>' not found in .claude/darwin-pairings/. Create the pairing file or run /darwin-init.`
+Resolve the pairing by checking these locations in order:
+1. `.claude/darwin-pairings/<pairing-name>/pairing.yaml` (project-local override)
+2. `.claude/plugins/darwin/pairings/<pairing-name>/pairing.yaml` (plugin built-in)
+
+Built-in names: `implementer-with-tests`, `test-author`, `doc-writer`.
+
+If neither location has the file, halt: `Pairing '<name>' not found. Use a built-in or create .claude/darwin-pairings/<name>/pairing.yaml.`
 
 ---
 
@@ -165,7 +171,15 @@ Run the following 12-step kernel for each task. For parallel tasks, fan them out
 ### 6.1 Load and verify pairing
 
 ```bash
-cat <project-root>/.claude/darwin-pairings/<pairing-name>/pairing.yaml
+# Resolve pairing: project-local takes precedence over plugin built-ins
+PAIRING_FILE=""
+for candidate in \
+  "<project-root>/.claude/darwin-pairings/<pairing-name>/pairing.yaml" \
+  "<plugin-root>/pairings/<pairing-name>/pairing.yaml"; do
+  [ -f "$candidate" ] && PAIRING_FILE="$candidate" && break
+done
+[ -n "$PAIRING_FILE" ] || { echo "Pairing not found: <pairing-name>"; exit 1; }
+cat "$PAIRING_FILE"
 ```
 
 Compute SHA-256 of the canonicalized pairing YAML (keys sorted, whitespace normalized):

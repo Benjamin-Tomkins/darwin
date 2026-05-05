@@ -351,6 +351,82 @@ Always show the derived identifier and confirm before using it.
 
 ## Stopping and Resuming
 
-If the user says "stop" or "save progress" at any phase boundary, write `.new-state.json` to the plan directory capturing all answers so far. Tell the user to run `/darwin:plan-software --resume <plan-dir>` to continue.
+### Saving state
 
-If invoked with `--resume <plan-dir>`, read `.new-state.json`, show a one-line summary of what was captured, and continue from the last incomplete phase.
+When the user says "stop", "save", or "save progress" at any phase boundary, write `<plan-dir>/.plan-software-state.json` and respond:
+
+```
+Saved. Resume with: /darwin:plan-software --resume <plan-dir>
+```
+
+**State file schema** — mirrors the Structurizr DSL hierarchy (`workspace → model → softwareSystem → container → component`). Write all keys collected so far; omit sections not yet reached.
+
+```json
+{
+  "version": 1,
+  "last_completed_phase": "Gather project details",
+  "completed_phases": ["Explore existing plans", "Gather project details"],
+  "workspace": {
+    "name": "Payment Service",
+    "identifier": "payment-service",
+    "plan_dir": "plans/payment-service",
+    "description": "Processes card payments for merchants"
+  },
+  "model": {
+    "persons": [
+      { "name": "Merchant", "identifier": "merchant", "description": "Business owner accepting payments" }
+    ],
+    "softwareSystems": [
+      {
+        "name": "Payment Service",
+        "identifier": "payment-service",
+        "description": "Core payment platform",
+        "external": false,
+        "containers": [
+          {
+            "name": "API",
+            "identifier": "api",
+            "technology": "Node.js",
+            "description": "REST API",
+            "tags": ["service"],
+            "components": [
+              { "name": "PaymentAdapter", "identifier": "payment-adapter", "description": "Stripe integration" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Stripe",
+        "identifier": "stripe",
+        "description": "Payment processing API",
+        "external": true
+      }
+    ]
+  },
+  "assets": {
+    "api": { "type": "impl+tests", "pairing": "payment-service" },
+    "payment-adapter": { "type": "impl", "pairing": "payment-service" }
+  }
+}
+```
+
+Field notes:
+- `workspace.identifier` — the DSL workspace identifier used in `workspace "<identifier>"` and Darwin branch names
+- `workspace.description` — maps to DSL `description` property
+- `model.persons` — DSL `person` elements (users/actors); prose-only, no tasks
+- `model.softwareSystems` — DSL `softwareSystem` elements; `external: true` for third-party systems
+- `containers[].tags` — DSL `tags` values; Darwin uses `app`, `service`, `worker`, `store`, `gateway` to determine task eligibility
+- `containers[].technology` — DSL `technology` property
+- `assets` — Darwin-specific; keyed by `identifier`, drives which `.adoc` stubs and pairings are generated
+
+Valid `type` values: `impl`, `impl+tests`, `impl+tests+bdd`, `tests`, `skip`.
+
+### Resuming
+
+When invoked as `/darwin:plan-software --resume <plan-dir>`:
+
+1. Read `<plan-dir>/.plan-software-state.json`
+2. If the file does not exist, say: `No saved state at <plan-dir>/.plan-software-state.json — starting fresh.` and begin from phase 1
+3. Otherwise, show: `Resuming <workspace.name> — last completed: <last_completed_phase>`
+4. Mark all phases in `completed_phases` as done in TaskCreate
+5. Continue from the next phase after `last_completed_phase`, treating all saved values as already-answered (skip those questions)

@@ -1,9 +1,9 @@
 ---
-name: new
+name: plan-software
 description: Guided C4 model builder — walks through the big picture, applications & services, and internal structure, producing AsciiDoc files ready for /darwin:worktree. Use when starting a new project from scratch.
 ---
 
-# /darwin:new
+# /darwin:plan-software
 
 Guided creation of a C4 AsciiDoc plan. Produces `index.adoc` and sibling asset `.adoc` files ready for `/darwin:worktree`.
 
@@ -351,6 +351,6 @@ Always show the derived slug and confirm before using it.
 
 ## Stopping and Resuming
 
-If the user says "stop" or "save progress" at any phase boundary, write `.new-state.json` to the plan directory capturing all answers so far. Tell the user to run `/darwin:new --resume <plan-dir>` to continue.
+If the user says "stop" or "save progress" at any phase boundary, write `.new-state.json` to the plan directory capturing all answers so far. Tell the user to run `/darwin:plan-software --resume <plan-dir>` to continue.
 
 If invoked with `--resume <plan-dir>`, read `.new-state.json`, show a one-line summary of what was captured, and continue from the last incomplete phase.

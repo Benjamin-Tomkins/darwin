@@ -500,36 +500,48 @@ When the user says "stop", "save", or "save progress" at any phase boundary, wri
 Saved. Resume with: /darwin:plan-software --resume <plan-dir>
 ```
 
-**State file schema** — write all keys collected so far; omit phases not yet reached:
+**State file schema** — mirrors the Structurizr DSL hierarchy (`workspace → model → softwareSystem → container → component`). Write all keys collected so far; omit sections not yet reached.
 
 ```json
 {
   "version": 1,
   "last_completed_phase": "Gather project details",
   "completed_phases": ["Explore existing plans", "Gather project details"],
-  "project": {
+  "workspace": {
     "name": "Payment Service",
-    "slug": "payment-service",
+    "identifier": "payment-service",
     "plan_dir": "plans/payment-service",
-    "overview": "Processes card payments for merchants"
+    "description": "Processes card payments for merchants"
   },
-  "big_picture": {
-    "products": [
-      { "name": "Payment Service", "slug": "payment-service", "description": "..." }
+  "model": {
+    "persons": [
+      { "name": "Merchant", "identifier": "merchant", "description": "Business owner accepting payments" }
     ],
-    "users": [
-      { "name": "Merchant", "description": "Business owner accepting payments" }
-    ],
-    "external": [
-      { "name": "Stripe", "description": "Payment processing API" }
-    ]
-  },
-  "services": [
-    { "name": "API", "slug": "api", "category": "service", "tech": "Node.js", "description": "REST API" }
-  ],
-  "components": {
-    "api": [
-      { "name": "PaymentAdapter", "slug": "payment-adapter", "description": "Stripe integration" }
+    "softwareSystems": [
+      {
+        "name": "Payment Service",
+        "identifier": "payment-service",
+        "description": "Core payment platform",
+        "external": false,
+        "containers": [
+          {
+            "name": "API",
+            "identifier": "api",
+            "technology": "Node.js",
+            "description": "REST API",
+            "tags": ["service"],
+            "components": [
+              { "name": "PaymentAdapter", "identifier": "payment-adapter", "description": "Stripe integration" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Stripe",
+        "identifier": "stripe",
+        "description": "Payment processing API",
+        "external": true
+      }
     ]
   },
   "assets": {
@@ -539,8 +551,16 @@ Saved. Resume with: /darwin:plan-software --resume <plan-dir>
 }
 ```
 
+Field notes:
+- `workspace.identifier` — the slug used in DSL `workspace "<identifier>"` and Darwin branch names
+- `workspace.description` — maps to DSL `description` property
+- `model.persons` — DSL `person` elements (users/actors); prose-only, no tasks
+- `model.softwareSystems` — DSL `softwareSystem` elements; `external: true` for third-party systems
+- `containers[].tags` — DSL `tags` values; Darwin uses `app`, `service`, `worker`, `store`, `gateway` to determine task eligibility
+- `containers[].technology` — DSL `technology` property
+- `assets` — Darwin-specific; keyed by `identifier`, drives which `.adoc` stubs and pairings are generated
+
 Valid `type` values: `impl`, `impl+tests`, `impl+tests+bdd`, `tests`, `skip`.
-Valid `category` values: `app`, `service`, `worker`, `store`, `gateway`.
 
 ### Resuming
 
@@ -548,7 +568,7 @@ When invoked as `/darwin:plan-software --resume <plan-dir>`:
 
 1. Read `<plan-dir>/.plan-software-state.json`
 2. If the file does not exist, say: `No saved state at <plan-dir>/.plan-software-state.json — starting fresh.` and begin from phase 1
-3. Otherwise, show: `Resuming <project.name> — last completed: <last_completed_phase>`
+3. Otherwise, show: `Resuming <workspace.name> — last completed: <last_completed_phase>`
 4. Mark all phases in `completed_phases` as done in TaskCreate
 5. Continue from the next phase after `last_completed_phase`, treating all saved values as already-answered (skip those questions)
 ```
@@ -556,7 +576,7 @@ When invoked as `/darwin:plan-software --resume <plan-dir>`:
 - [ ] **Step 2: Verify the replacement landed correctly**
 
 ```bash
-grep -c "last_completed_phase\|completed_phases\|valid.*type.*values\|Resuming" \
+grep -c "last_completed_phase\|softwareSystems\|workspace.identifier\|Resuming" \
   .claude/plugins/darwin/skills/plan-software/SKILL.md
 ```
 Expected: 4

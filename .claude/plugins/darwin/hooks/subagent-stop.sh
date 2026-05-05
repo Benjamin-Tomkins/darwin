@@ -24,7 +24,7 @@ mkdir -p "$SIGNAL_DIR"
 
 # Sum token usage across all API turns in the transcript.
 # Transcript is JSONL; each line is a message/event object.
-# Usage lives at .usage.{input_tokens,output_tokens,thinking_tokens}.
+# Usage lives at .usage (bare) or .message.usage (wrapped assistant turns).
 AGENT_INPUT=0
 AGENT_OUTPUT=0
 AGENT_THINKING=0

@@ -5,9 +5,60 @@
 
 ---
 
+## Foundational Model — Class, Instance, and Meta-Schema
+
+Before describing implementation, it is worth stating the underlying paradigm precisely, because it governs every architectural decision that follows.
+
+### The C4 Model as Type System
+
+The C4 model is the **class representation of all software**. Every software problem is an instance of a C4 model in exactly the same way that every serialisable value is an instance of a JSON Schema:
+
+| JSON Schema analogy | Darwin equivalent |
+|---------------------|-------------------|
+| JSON Schema meta-schema | C4 model itself (the type system for software architecture) |
+| A specific JSON Schema | An object-level `PlanGraph` — the C4 plan for one software system |
+| A JSON object that validates against the schema | An implementation that satisfies the plan |
+| Schema validation errors + fix attempts | ADRs — evidence of where/why the instance deviated from the schema and what was tried |
+
+The JSON Schema meta-schema defines what a valid schema is; a specific schema defines what a valid object of that type is; and a concrete object either satisfies the schema or produces typed validation errors. In Darwin: the C4 model defines what a valid software plan is; a specific `index.adoc` defines what a valid system of that type looks like; and a concrete implementation either satisfies the plan or produces ADR evidence of where it diverged and why.
+
+This means **all software problems are structurally identical at the type level** — they differ only in which instance of the C4 model they instantiate. The same harness mechanism applies uniformly because the C4 model is the universal schema for software architecture.
+
+### The Bilevel Structure
+
+The harness therefore operates at two levels simultaneously:
+
+**Object level** — a specific software system being designed and built. The object-level `PlanGraph` is one instantiation of the C4 model: `index.adoc` carries the intent tree for that system, and its ADR ledger accumulates experimental evidence about that specific instance.
+
+**Meta level** — the Darwin harness itself, modelled using the same C4 mechanism. The meta-level `PlanGraph` is Darwin's self-model: it describes the Controller, Runner, Judge, and PlanGraph as C4 containers, and its ADR ledger accumulates cross-project evidence about Darwin's own strategies — which hypothesis orderings improve confidence, which confidence thresholds reduce inconclusive rates, which failure classes recur across problem types. This is the harness's prior knowledge about software problems in general.
+
+The relationship is precisely class/instance:
+
+```
+meta-level PlanGraph  ≡  the class definition
+                          "this is what processing a C4 plan looks like"
+
+object-level PlanGraph ≡  an instance of that class
+                          "this is how Payment Service in particular is being processed"
+```
+
+The meta-level plan validates and refines the object-level plan in the same way a class definition constrains its instances. When the meta-plan accumulates an ADR saying "leaves-first hypothesis ordering outperforms top-down in container-heavy plans", that knowledge is expressed as an update to Darwin's own strategy — a change to the Controller's intent file (`darwin-eval-harness/controller` asset) — which then shapes how every subsequent object-level plan is processed.
+
+### Why This Matters Architecturally
+
+1. **Self-testing** — the harness tests itself using the same mechanism it uses to test anything. Meta-level experiments (hypotheses about Darwin's own behaviour) produce ADRs in the same format, through the same Judge, committed to the same ledger. Darwin's correctness and effectiveness are both first-class concerns in the same system.
+
+2. **Transfer learning via the git ledger** — the meta-level ADR history is the accumulated prior. Each new object-level project starts with a Controller whose prompt contains `meta.contextSummary()` — a condensed narrative of everything Darwin has learned about software problems of this type. The meta-plan is the long-term memory across sessions and projects.
+
+3. **Convergence is meaningful at both levels** — an object-level plan converges when its implementation satisfies its intent; the meta-level plan converges when Darwin's strategies are stable across a class of problems. The meta-level ADRs encode why certain strategies were selected and what was tried before arriving at them — exactly the evolutionary record.
+
+4. **The mechanism is the same** — `PlanGraph`, `DarwinCommit`, `DarwinCommitLog`, construction modes, ADR format, git-as-safety-net — all identical at both levels. There is no special meta-machinery; the system models itself using the same tools it uses to model anything else. This is the deepest form of dogfooding: the tool is its own first use case.
+
+---
+
 ## Goal
 
-Build a self-evolving evaluation harness that runs Darwin skills headlessly, judges their output against generated hypotheses, records every experiment as a self-contained ADR in the git commit history, and applies targeted Darwin source edits when experiments identify failures with high confidence. The git ledger is both the safety net and the institutional memory — every decision is recoverable, reversible, and queryable.
+Build a self-evolving evaluation harness that runs Darwin skills headlessly, judges their output against generated hypotheses, records every experiment as a self-contained ADR in the git commit history, and applies targeted Darwin source edits when experiments identify failures with high confidence. The harness operates at two levels: object-level (one C4 plan per software system) and meta-level (Darwin's own self-model, accumulated across all projects). The git ledger is both the safety net and the institutional memory — every decision is recoverable, reversible, and queryable at both levels.
 
 ---
 
@@ -667,14 +718,23 @@ The two axes are independent: you can deepen the intent (add a new container to 
 - `_mode` flips to `'live'` automatically on the first call to any mutating method. Once live, every state transition emits a debug log entry (via `darwin_debug`) and performs its git operation before returning. The flip is one-way within a session: once live, the graph stays live.
 - `PlanGraph.fromRef(ref, repoPath, { debug: true })` reconstructs silently but re-emits all log entries with a `reconstructed:` prefix — used only for validating that `fromRef()` produces an object consistent with what was originally committed.
 
-**The LLM does not interact with git.** All git operations (reading `.adoc` files at a ref, reading the commit log, staging files, committing ADRs, writing `running.json`) are encapsulated inside `PlanGraph` and `DarwinCommit`. The Controller receives a `PlanGraph` instance and calls methods on it; it has no awareness of git commands or file paths.
+**The LLM does not interact with git.** All git operations (reading `.adoc` files at a ref, reading the commit log, staging files, committing ADRs, writing `running.json`) are encapsulated inside `PlanGraph` and `DarwinCommit`. The Controller receives two `PlanGraph` instances — `meta` and `object` — and calls methods on them; it has no awareness of git commands or file paths.
+
+**Bilevel construction.** The Controller always loads both graphs at startup:
+
+```typescript
+const meta   = await PlanGraph.fromRef('HEAD', repoPath, { level: 'meta' });
+const object = await PlanGraph.fromRef('HEAD', repoPath, { level: 'object', indexAdoc });
+```
+
+`level: 'meta'` reads from `docs/darwin/meta/index.adoc` (Darwin's self-model). `level: 'object'` reads from the project's `index.adoc`. Both share the same class; the level flag determines which `index.adoc` to parse and which git branch prefix to query for ADRs (`agent/darwin-eval-harness/...` for meta, `agent/<project-identifier>/...` for object).
 
 **In-flight state.** Between an experiment starting and its ADR commit landing, the graph writes a `running.json` to `$SIGNAL_BASE/<repo-hash>/<task-slug>/running.json` on the first live mutating call for that node. This file is deleted when `recordExperiment()` commits the ADR. On `fromRef()`, if `running.json` exists for a node, that node is marked `status: 'running'` in the reconstructed graph — allowing a resumed session to detect and handle experiments that were in progress when the session terminated.
 
 ```typescript
-// Node types mirror the C4 hierarchy
+type PlanLevel   = 'object' | 'meta';
 type PlanNodeType = 'softwareSystem' | 'container' | 'component';
-type NodeStatus = 'unstarted' | 'running' | 'resolved' | 'contested' | 'stale';
+type NodeStatus  = 'unstarted' | 'running' | 'resolved' | 'contested' | 'stale';
 // resolved   = high-confidence passing ADR against current intent
 // contested  = conflicting ADRs (mix of pass/fail at high confidence)
 // stale      = passing ADR exists but was run against an older version of the intent file
@@ -697,8 +757,11 @@ class PlanGraph {
   static fromRef(
     ref: string,
     repoPath: string,
-    opts?: { debug?: boolean }
+    opts?: { level?: PlanLevel; indexAdoc?: string; debug?: boolean }
   ): Promise<PlanGraph>
+
+  // Level of this instance
+  get level(): PlanLevel       // 'object' | 'meta'
 
   // Read-only navigation (never trigger mode flip)
   get root(): PlanNode
@@ -711,7 +774,10 @@ class PlanGraph {
   stale(): PlanNode[]                          // intent updated after last passing ADR
 
   // Context generation for Controller prompt (read-only, no mode flip)
-  contextSummary(node?: PlanNode): string      // intent + evidence narrative for Opus prompt
+  // When called on the meta graph, produces cross-project prior knowledge narrative.
+  // When called on an object graph, produces project-specific intent + evidence narrative.
+  // The Controller injects both into its prompt: meta first (prior), then object (current).
+  contextSummary(node?: PlanNode): string
 
   // Mutating methods — each flips _mode to 'live' on first call, then emits debug log + git op
   async markRunning(branchPath: string): Promise<void>
@@ -722,6 +788,7 @@ class PlanGraph {
     commit: DarwinCommit
   ): Promise<void>
     // attaches commit to node.evidence; updates node.status; deletes running.json;
+    // if this.level === 'meta': also updates cross-project strategy metrics
     // emits: { hook: 'plan-graph', message: 'node:evidence-attached <branchPath> status=<status>' }
 
   async updateIntent(
@@ -731,6 +798,7 @@ class PlanGraph {
   ): Promise<string>
     // writes updated asset .adoc; commits; marks dependent evidence as stale;
     // returns new SHA; emits: { hook: 'plan-graph', message: 'node:intent-updated <branchPath>' }
+    // for meta-level: also marks all object-level nodes whose strategy depends on this intent as stale
 }
 ```
 
@@ -742,29 +810,41 @@ class PlanGraph {
 helpers/eval-harness/
   src/
     types.ts               — Zod schemas + inferred types: Hypothesis, ADR, DarwinCommitMeta,
-                             PlanNode, NodeStatus, ExperimentMeta, Verdict, Edit, TokenCount
+                             PlanNode, NodeStatus, PlanLevel, ExperimentMeta, Verdict, Edit,
+                             TokenCount
     DarwinCommit.ts        — class: one experiment commit; serialise/parse; git write
     DarwinCommitLog.ts     — class: git range → DarwinCommit[]; filter/group/summarise
-    PlanGraph.ts           — class: intent tree + evidence ledger; construction modes;
-                             contextSummary; mutating methods that own all git + log ops
-    controller.ts          — Experiment Controller (Opus outer loop); calls PlanGraph only
+    PlanGraph.ts           — class: dual-axis intent tree + evidence ledger; bilevel (object/meta);
+                             construction modes; contextSummary; mutating methods own all git + log
+    controller.ts          — Experiment Controller (Opus outer loop); receives meta + object
+                             PlanGraph; calls PlanGraph methods only; no git awareness
     runner.ts              — Experiment Runner (Sonnet middle loop)
     judge.ts               — Eval Judge (Opus: verdict, edit proposal, ADR write)
-    hypothesis.ts          — Hypothesis type + generator logic (reads PlanGraph.unresolved())
+    hypothesis.ts          — Hypothesis generator; reads object.unresolved() + meta.contextSummary()
   fixtures/
-    plan-software/         — pre-built fixture specs for known scenarios
+    plan-software/         — pre-built object-level fixture specs
       single-container.json
       multi-system.json
       resume-mid-phase.json
+    meta/                  — meta-level fixture specs (hypotheses about Darwin's own strategies)
+      hypothesis-ordering.json
+      confidence-threshold.json
   tests/
     DarwinCommit.test.ts   — unit tests against fixture commit messages (no git required)
     DarwinCommitLog.test.ts
     PlanGraph.test.ts      — unit tests: fromRef reconstruction, mode transitions,
-                             status derivation, contextSummary output shape
+                             status derivation, contextSummary output shape, bilevel isolation
   package.json
   tsconfig.json
 
-docs/darwin/adrs/          — materialized ADR view rendered from git log (not source of truth)
+docs/darwin/meta/          — meta-level C4 plan: Darwin modelling itself
+  index.adoc               — softwareSystem "Darwin Eval Harness"; containers: Controller,
+                             Runner, Judge, PlanGraph, Knowledge Base
+  controller-strategy.adoc — impl asset: hypothesis ordering, confidence calibration strategies
+  judge-strategy.adoc      — impl asset: verdict calibration, evidence threshold strategies
+  knowledge-base.adoc      — bdd asset: acceptance criteria for cross-project knowledge transfer
+
+docs/darwin/adrs/          — materialised ADR view rendered from git log (not source of truth)
 ```
 
 ---
@@ -783,3 +863,8 @@ docs/darwin/adrs/          — materialized ADR view rendered from git log (not 
 - **`running.json` is the in-flight sentinel.** It is written by `markRunning()` and deleted by `recordExperiment()`. A `running.json` present at `fromRef()` time marks the node `status: 'running'` in the reconstructed graph — the Controller handles this as an interrupted experiment on resume.
 - **Node `status` is always derived, never stored.** `NodeStatus` is computed from `evidence[]` vs `intentSha` at read time; it is not persisted to disk or git. `running.json` is the only exception (in-flight signal, not status).
 - **Depth encodes resolution of understanding.** The intent tree mirrors the C4 levels: softwareSystem (problem space) → container (deployable units) → component (internal modules). The Controller works from leaves upward: resolving fine-grained uncertainties first and propagating confidence toward the root.
+- **The bilevel structure is not optional.** Every Controller run loads both the meta-level and the object-level `PlanGraph`. The meta graph's `contextSummary()` is always injected first into the Controller prompt (as prior knowledge); the object graph's `contextSummary()` follows (as current project state). Running without the meta graph is not a supported mode.
+- **The meta-level plan models Darwin exactly as Darwin models anything else.** `docs/darwin/meta/index.adoc` is a real `index.adoc` with a Structurizr DSL block, container assets, and pairing stubs — not a documentation file. It is processed by the same `PlanGraph.fromRef()` call, produces the same ADR format, and evolves through the same EVOLVE path. There is no special meta-machinery.
+- **Meta-level ADRs express cross-project generalisations.** A meta-level ADR records a decision about Darwin's strategy (hypothesis ordering, confidence thresholds, model selection) that applies across all object-level plans. Its `experiment.branch` follows the same convention: `agent/darwin-eval-harness/<container-identifier>/<asset>`. Its `experiment.skill` uses Darwin's own skill identifiers (e.g. `'controller-strategy'`, `'judge-strategy'`).
+- **Object-level and meta-level git histories are separate ledgers but the same repo.** Meta-level experiment commits are on branches under `agent/darwin-eval-harness/...`; object-level experiment commits are on branches under `agent/<project-identifier>/...`. `DarwinCommitLog.fromRange()` scopes to one ledger by querying the appropriate branch prefix. The two ledgers never share branches but share the same repository and the same `DARWIN_META` format.
+- **The meta-level plan can update Darwin source.** When a meta-level experiment proposes a change to a Darwin skill or hook (via the `edit` field with `target: 'darwin-source'`), the same EVOLVE path applies: fresh worktree, re-run, commit only if re-run passes. This is how Darwin improves its own strategies. The meta-level is Darwin's self-directed evolution loop.

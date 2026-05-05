@@ -426,6 +426,151 @@ records `Phase-Transition: true` and may carry a different
 The `:phase:` attribute updates; the implementer agent then runs against
 the BDD scenarios and writes code to the `writable_globs`.
 
+== [task] block
+
+Every asset `.adoc` that spawns a workflow carries exactly one `[task]`
+block. The controller parses it as YAML (R1.4, R1.5). The block is written
+by the plan author and is not mutated by the controller.
+
+The block is valid on any asset key (`impl`, `tests`, `bdd`, `detail`),
+not only `impl`. `writable_globs` is required only on `impl` assets
+(R14.12); all other fields are optional everywhere.
+
+[%autowidth]
+|===
+| Field | Type | Required | Default | Notes
+
+| `pairing`
+| string
+| No
+| Type-based default
+| Pairing template name. If absent the controller infers: `impl` →
+  `implementer-with-tests`; `tests`/`bdd` → `test-author-with-meta-rubric`;
+  `detail` → `doc-writer-with-checks`.
+
+| `writable_globs`
+| list of globs
+| `impl` only
+| —
+| Paths the agent may write; populates the sandbox allowlist (R4.3, R14.12).
+
+| `readonly_globs`
+| list of globs
+| No
+| `[]`
+| Additional paths injected as read-only into the agent worktree.
+
+| `depends_on`
+| list of dotted identifiers
+| No
+| `[]`
+| Tasks that must reach `●` before this task starts (R1.9). Use the dotted
+  form derived from the branch path, e.g.
+  `notification-platform.api.auth-middleware`.
+
+| `stop_criteria`
+| prose string
+| No
+| —
+| Human-readable description of when the agent should consider its work done.
+  Forwarded verbatim into the agent's brief.
+
+|===
+
+== [task-state] block
+
+The `[task-state]` block is the controller's crash-recovery anchor
+(R1.6, R7.19). It is written and updated exclusively by the controller —
+**never hand-edited** — and is fully reconcilable from Git trailers if
+lost (R1.7).
+
+Every asset `.adoc` that has a `[task]` block carries exactly one
+`[task-state]` block, written directly after `[task]`.
+
+**Initial state** (authored alongside `[task]`, before the first attempt):
+
+[source,asciidoc]
+----
+[task-state]
+----
+status: ◌
+----
+----
+
+NOTE: The nested `----` delimiters above are literal AsciiDoc — the outer
+block is a `[source,asciidoc]` code listing, not a live delimiter.
+
+**Runtime state** (written atomically by the controller before spawning the
+Agent tool — this is the crash-recovery commit point):
+
+[source,asciidoc]
+------
+[task-state]
+----
+status: running
+agent_name: auth-middleware-attempt-1
+worktree_path: /Users/alice/.claude/darwin-worktrees/a3f9c1/api/auth-middleware/impl
+signal_path: /Users/alice/.claude/darwin-state/a3f9c1/api/auth-middleware/impl/signal.json
+last_attempt: 1
+branch: agent/notification-platform/api/auth-middleware/impl
+ladder_id: 2026-05-03T14:22:00Z
+pairing_hash: sha256:9f2c1e0a8b73d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9
+----
+------
+
+Field reference:
+
+[%autowidth]
+|===
+| Field | Written by | Notes
+
+| `status`
+| Controller
+| `◌` not started; `running` in-flight; `●` pass; `⊗` failed (awaiting retry);
+  `⊖` HANDOFF (human intervention required).
+
+| `agent_name`
+| Controller
+| `<task-identifier>-attempt-<N>`. Matches the Agent tool's `name:` field for
+  transcript observability.
+
+| `worktree_path`
+| Controller
+| Absolute path to the sparse worktree. Stable within a task instance across
+  retries.
+
+| `signal_path`
+| Controller
+| Absolute path to the `signal.json` written by the SubagentStop hook.
+  Derived from `worktree_path`:
+  `~/.claude/darwin-state/<repo-hash>/<task-path>/signal.json`.
+  Pre-computable and collision-free across concurrent tasks (R1.10).
+
+| `last_attempt`
+| Controller
+| Running attempt count for this task instance.
+
+| `branch`
+| Controller
+| The agent branch being written.
+
+| `ladder_id`
+| Controller
+| Timestamp-ID of the escalation ladder pinned for this attempt.
+
+| `pairing_hash`
+| Controller
+| SHA-256 of the canonicalized pairing YAML. Mid-run hash drift halts with
+  `needs-human` (R7.17/R7.18) unless the latest commit carries
+  `Phase-Transition: true`.
+
+|===
+
+On re-invocation the controller reads `signal_path` from `[task-state]` to
+decide whether to re-spawn or continue from a previously completed agent
+run (R8.4, R8.5). See crash and resume recovery table in
+`sparse-workflow.md` R8.
+
 == Branch hierarchy
 
 The folder is flat; the C4 hierarchy is carried in Git branch names.
@@ -794,7 +939,8 @@ xref:auth-middleware.adoc[Auth Middleware Detail] — sibling spec.
 | `xref:other.adoc#anchor[label]` | Human-navigable cross-references to DSL element anchors.
 | Source blocks with language hint (`gherkin`, `pseudocode`) | Asset bodies in domain-appropriate notation.
 | `[attempt-log]` literal block | Per-asset attempt history (regenerable from Git).
-| `[task]` literal block | Implementation-asset writable scope (R14.12).
+| `[task]` literal block | Per-asset workflow configuration: pairing, writable/readonly scope, dependencies, stop criteria (R1.4, R1.5, R14.12).
+| `[task-state]` literal block | Controller-managed runtime state for crash recovery and resume (R1.6, R1.7, R7.19).
 | Admonitions (`NOTE`) | Author guidance.
 |===
 

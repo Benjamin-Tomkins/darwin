@@ -217,6 +217,47 @@ else
   fail "subagent-stop: token extraction failed — run hooks/tests/subagent-stop.test.sh for details"
 fi
 
+# ── 10. debug logging ─────────────────────────────────────────────────────
+
+echo ""
+echo "--- 10. debug logging"
+DARWIN_LOG="$HOME/.claude/darwin-state/debug.log"
+# Back up any existing log; restore on exit
+_LOG_BAK=""
+if [ -f "$DARWIN_LOG" ]; then
+  _LOG_BAK=$(mktemp)
+  cp "$DARWIN_LOG" "$_LOG_BAK"
+fi
+rm -f "$DARWIN_LOG"
+
+# Fire worktree-create with a non-darwin path — produces a skip entry without side-effects
+echo '{"path":"/tmp/not-darwin-debug-$$"}' \
+  | bash "$PLUGIN/hooks/worktree-create.sh" 2>/dev/null || true
+
+if [ -f "$DARWIN_LOG" ]; then
+  ok "debug.log created"
+  LAST=$(tail -1 "$DARWIN_LOG")
+  if echo "$LAST" | jq . >/dev/null 2>&1; then
+    ok "debug.log last entry is valid JSON"
+    for field in timestamp hook repo_hash task_identifier message; do
+      if echo "$LAST" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
+        ok "debug entry has field: $field"
+      else
+        fail "debug entry missing field: $field"
+      fi
+    done
+  else
+    fail "debug.log last entry is not valid JSON: $LAST"
+  fi
+else
+  fail "debug.log not created"
+fi
+
+# Restore prior log if one existed
+if [ -n "$_LOG_BAK" ]; then
+  mv "$_LOG_BAK" "$DARWIN_LOG"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────
 
 echo ""

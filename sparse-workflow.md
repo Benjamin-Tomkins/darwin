@@ -1480,6 +1480,61 @@ file so the agent's local modifications do not propagate to other branches.
 | `PreToolUse:Edit`/`PreToolUse:Write` | agent | Enforces writable allowlist + protected tag regions. Allowlist comes from pairing's `scope.writable_globs`. |
 | `SubagentStop` | parent (signal) | Receives `session_id` (parent session), `cwd` (worktree path), `transcript_path`, `agent_id` on stdin JSON. Derives signal key from `cwd`: strips `~/.claude/darwin-worktrees/` prefix to obtain `<repo-hash>/<task-slug>`. Reads `transcript_path` to extract cumulative token usage (`input_tokens`, `output_tokens`, `thinking_tokens`) from the subagent session. Writes signal to `~/.claude/darwin-state/<repo-hash>/<task-slug>/signal.json` containing `agent_tokens: {input, output, thinking}` alongside the stop metadata. One signal path per task; concurrent tasks on distinct branches never collide. Does not decide outcome — controller reads signal and drives the loop. |
 
+## Debug Logging
+
+Both `WorktreeCreate` and `SubagentStop` hooks append one JSONL entry per key event to `~/.claude/darwin-state/debug.log`. The log is always active — no environment variable required. Each entry is a single-line JSON object:
+
+```json
+{"timestamp":"2026-05-05T14:32:01Z","hook":"worktree-create","repo_hash":"a3f8b1","task_identifier":"a3f8b1/greeter/impl","message":"worktree created: branch=agent/hello-world/greeter/impl base=HEAD"}
+```
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| `timestamp` | UTC ISO-8601 (`YYYY-MM-DDTHH:MM:SSZ`) |
+| `hook` | `worktree-create` or `subagent-stop` |
+| `repo_hash` | Repo fingerprint; empty string for non-darwin-path skips |
+| `task_identifier` | `<repo-hash>/<task-slug>` within the worktree base; empty for skips |
+| `message` | Human-readable event description |
+
+**Key log events:**
+
+| Hook | Message prefix | Meaning |
+|------|---------------|---------|
+| `worktree-create` | `non-darwin path, skipping` | Hook fired for a non-darwin worktree; no-op |
+| `worktree-create` | `entered` | Darwin-managed path confirmed |
+| `worktree-create` | `manifest not found` | No manifest at expected path — race or config error |
+| `worktree-create` | `worktree created` | `git worktree add` succeeded; includes branch and base ref |
+| `worktree-create` | `sparse checkout configured` | Sparse patterns applied and files checked out |
+| `worktree-create` | `agent template injected` | `.claude/` overlay applied from pairing template |
+| `worktree-create` | `no agent template` | No pairing template directory found; only minimal settings written |
+| `worktree-create` | `sandbox settings written` | `settings.json` written or patched |
+| `worktree-create` | `done` | Hook completed successfully |
+| `subagent-stop` | `non-darwin cwd, skipping` | Hook fired outside a darwin worktree; no-op |
+| `subagent-stop` | `entered` | Darwin-managed cwd confirmed |
+| `subagent-stop` | `no transcript` | Transcript path absent or file missing; tokens default to 0 |
+| `subagent-stop` | `tokens extracted` | Includes `input=N output=N thinking=N` |
+| `subagent-stop` | `signal written` | `signal.json` ready for controller |
+
+**Querying parallel worktrees:**
+
+```bash
+# Tail all hooks live
+tail -f ~/.claude/darwin-state/debug.log | jq .
+
+# Filter by task
+jq 'select(.task_identifier == "a3f8b1/greeter/impl")' ~/.claude/darwin-state/debug.log
+
+# Show only skips and errors
+jq 'select(.message | startswith("non-darwin") or startswith("manifest not found"))' ~/.claude/darwin-state/debug.log
+
+# Show one repo's events in order
+jq 'select(.repo_hash == "a3f8b1")' ~/.claude/darwin-state/debug.log
+```
+
+**Log growth:** capped at 5000 lines; oldest entries are discarded on overflow. The log lives under `~/.claude/darwin-state/` and is never committed to any repository.
+
 ---
 
 ## Sub-Agent Definition (per pairing)

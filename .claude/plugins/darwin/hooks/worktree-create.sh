@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # WorktreeCreate hook: creates sparse worktree from controller manifest.
 set -euo pipefail
+# shellcheck source=lib/debug.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/debug.sh"
 
 INPUT=$(cat)
 
@@ -16,7 +18,8 @@ fi
 WORKTREE_BASE="$HOME/.claude/darwin-worktrees"
 
 if [[ "$WORKTREE_PATH" != "$WORKTREE_BASE/"* ]]; then
-  exit 0  # Not a darwin-managed worktree — skip silently
+  darwin_debug "worktree-create" "" "" "non-darwin path, skipping: $WORKTREE_PATH"
+  exit 0
 fi
 
 SIGNAL_BASE="$HOME/.claude/darwin-state"
@@ -25,7 +28,10 @@ REPO_HASH="${RELATIVE%%/*}"
 TASK_SLUG="${RELATIVE#*/}"
 MANIFEST_PATH="$SIGNAL_BASE/$REPO_HASH/$TASK_SLUG/manifest.json"
 
+darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "entered"
+
 if [ ! -f "$MANIFEST_PATH" ]; then
+  darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "manifest not found: $MANIFEST_PATH"
   echo "worktree-create: manifest not found at $MANIFEST_PATH" >&2
   exit 1
 fi
@@ -64,13 +70,19 @@ git -C "$WORKTREE_PATH" sparse-checkout init --no-cone
   printf '.claude/**\n'
 } | git -C "$WORKTREE_PATH" sparse-checkout set --stdin
 
+darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "worktree created: branch=$BRANCH base=$BASE_REF"
+
 git -C "$WORKTREE_PATH" checkout
+darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "sparse checkout configured"
 
 # Inject .claude/ from agent template if provided.
 # mkdir -p ensures the directory exists even when .claude/ isn't yet in the working tree.
 mkdir -p "$WORKTREE_PATH/.claude/agents"
 if [ -n "$AGENT_TEMPLATE_PATH" ] && [ -d "$AGENT_TEMPLATE_PATH" ]; then
   cp -r "$AGENT_TEMPLATE_PATH/." "$WORKTREE_PATH/.claude/"
+  darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "agent template injected from $AGENT_TEMPLATE_PATH"
+else
+  darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "no agent template"
 fi
 
 # Populate sandbox.filesystem.allowWrite from manifest writable_globs.
@@ -104,6 +116,7 @@ else
     }
   }' > "$SETTINGS"
 fi
+darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "sandbox settings written"
 
 # Mark injected files skip-worktree so agent edits don't get accidentally committed.
 #
@@ -139,4 +152,5 @@ fi
 
 # Return absolute worktree path to Claude Code on stdout
 WORKTREE_NEEDS_CLEANUP=0
+darwin_debug "worktree-create" "$REPO_HASH" "$TASK_SLUG" "done"
 printf '%s\n' "$WORKTREE_PATH"

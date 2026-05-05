@@ -168,6 +168,25 @@ for skill_dir in "$PLUGIN/skills"/*/; do
   fi
 done
 
+# ── 7. hook graceful-skip tests ───────────────────────────────────────────
+
+echo ""
+echo "--- 7. hook graceful-skip tests"
+
+if echo '{"cwd":"/tmp/not-darwin-$$","transcript_path":""}' \
+     | bash "$PLUGIN/hooks/subagent-stop.sh" 2>/dev/null; then
+  ok "subagent-stop: exits 0 for non-darwin cwd"
+else
+  fail "subagent-stop: exits non-zero for non-darwin cwd"
+fi
+
+if echo '{"path":"/tmp/not-darwin-$$"}' \
+     | bash "$PLUGIN/hooks/worktree-create.sh" 2>/dev/null; then
+  ok "worktree-create: exits 0 for non-darwin path"
+else
+  fail "worktree-create: exits non-zero for non-darwin path"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────
 
 echo ""

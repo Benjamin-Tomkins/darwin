@@ -17,8 +17,7 @@ SIGNAL_BASE="$HOME/.claude/darwin-state"
 # Derive <repo-hash>/<task-slug> from cwd
 RELATIVE="${CWD#"$WORKTREE_BASE/"}"
 if [ "$RELATIVE" = "$CWD" ]; then
-  echo "subagent-stop: cwd '$CWD' is not inside WORKTREE_BASE '$WORKTREE_BASE'" >&2
-  exit 1
+  exit 0  # Not a darwin-managed worktree — skip silently
 fi
 SIGNAL_DIR="$SIGNAL_BASE/$RELATIVE"
 mkdir -p "$SIGNAL_DIR"

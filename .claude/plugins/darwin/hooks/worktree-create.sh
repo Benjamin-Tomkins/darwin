@@ -16,8 +16,7 @@ fi
 WORKTREE_BASE="$HOME/.claude/darwin-worktrees"
 
 if [[ "$WORKTREE_PATH" != "$WORKTREE_BASE/"* ]]; then
-  echo "worktree-create: path is not under expected base ($WORKTREE_BASE): $WORKTREE_PATH" >&2
-  exit 1
+  exit 0  # Not a darwin-managed worktree — skip silently
 fi
 
 SIGNAL_BASE="$HOME/.claude/darwin-state"

@@ -25,6 +25,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# ── Test: non-darwin path exits 0 (silent no-op) ──────────────────────────
+echo '{"path":"/tmp/not-a-darwin-worktree-$$"}' | bash "$HOOK" 2>/dev/null
+[ $? -eq 0 ] || fail "worktree-create: should exit 0 for non-darwin path, got exit 1"
+echo "PASS  non-darwin path exits 0"
+
 # ── Setup: project repo ────────────────────────────────────────────────────
 PROJECT_DIR=$(mktemp -d /tmp/darwin-test-project-XXXXX)
 git -C "$PROJECT_DIR" init -q

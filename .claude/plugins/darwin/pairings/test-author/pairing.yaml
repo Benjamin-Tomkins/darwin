@@ -19,3 +19,4 @@ evals:
       problem: "No test files staged after agent run"
       hypothesis: "Agent did not create any test files"
       failure_class: validation-fail
+      consumes_attempt: true

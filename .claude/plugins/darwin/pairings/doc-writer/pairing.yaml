@@ -18,3 +18,4 @@ evals:
       problem: "No documentation files staged after agent run"
       hypothesis: "Agent did not create any documentation files"
       failure_class: validation-fail
+      consumes_attempt: true

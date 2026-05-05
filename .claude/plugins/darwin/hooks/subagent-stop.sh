@@ -26,7 +26,7 @@ REPO_HASH="${RELATIVE%%/*}"
 TASK_SLUG="${RELATIVE#*/}"
 SIGNAL_DIR="$SIGNAL_BASE/$RELATIVE"
 mkdir -p "$SIGNAL_DIR"
-darwin_debug "subagent-stop" "$REPO_HASH" "$TASK_SLUG" "entered: cwd=$CWD"
+darwin_debug "subagent-stop" "$REPO_HASH" "$RELATIVE" "entered: cwd=$CWD"
 
 # Sum token usage across all API turns in the transcript.
 # Transcript is JSONL; each line is a message/event object.
@@ -49,9 +49,9 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
       else . end
     ) | [.input, .output, .thinking] | @tsv
   ' "$TRANSCRIPT_PATH")
-  darwin_debug "subagent-stop" "$REPO_HASH" "$TASK_SLUG" "tokens extracted: input=$AGENT_INPUT output=$AGENT_OUTPUT thinking=$AGENT_THINKING"
+  darwin_debug "subagent-stop" "$REPO_HASH" "$RELATIVE" "tokens extracted: input=$AGENT_INPUT output=$AGENT_OUTPUT thinking=$AGENT_THINKING"
 else
-  darwin_debug "subagent-stop" "$REPO_HASH" "$TASK_SLUG" "no transcript, tokens default to 0"
+  darwin_debug "subagent-stop" "$REPO_HASH" "$RELATIVE" "no transcript, tokens default to 0"
 fi
 
 # Write signal.json — controller reads this after SubagentStop fires.
@@ -71,5 +71,5 @@ jq -n \
     }
   }' > "$SIGNAL_DIR/signal.json"
 
-darwin_debug "subagent-stop" "$REPO_HASH" "$TASK_SLUG" "signal written: $SIGNAL_DIR/signal.json"
+darwin_debug "subagent-stop" "$REPO_HASH" "$RELATIVE" "signal written: $SIGNAL_DIR/signal.json"
 echo "subagent-stop: signal written to $SIGNAL_DIR/signal.json" >&2

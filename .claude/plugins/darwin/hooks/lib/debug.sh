@@ -4,6 +4,7 @@
 # worktrees can be distinguished in a shared log.
 # Usage: darwin_debug <hook> <repo_hash> <task_identifier> <message>
 darwin_debug() {
+  command -v jq >/dev/null 2>&1 || return 0
   local log_dir="$HOME/.claude/darwin-state"
   local log_file="$log_dir/debug.log"
   mkdir -p "$log_dir"
@@ -21,6 +22,8 @@ darwin_debug() {
   local count
   count=$(wc -l < "$log_file")
   if [ "$count" -gt 5000 ]; then
-    tail -n 5000 "$log_file" > "${log_file}.tmp" && mv "${log_file}.tmp" "$log_file"
+    local tmpfile
+    tmpfile=$(mktemp "${log_file}.XXXXXX")
+    tail -n 5000 "$log_file" > "$tmpfile" && mv "$tmpfile" "$log_file" || rm -f "$tmpfile"
   fi
 }

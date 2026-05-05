@@ -297,17 +297,17 @@ controller applies the rules in R14.9. Summarised:
   orphaned asset; do NOT auto-delete the branch (per R12.7, cascade
   rollback is human-driven)
 
-| Renames an asset-reference value where the source DSL element's slug
+| Renames an asset-reference value where the source DSL element's identifier
   is unchanged
 | Treat as a filename change only; rename the file in the asset branch's
   next commit
 
-| Renames an asset-reference value AND the slug changes
-| Spawn a new asset workflow at the new slug; archive the old branch
+| Renames an asset-reference value AND the identifier changes
+| Spawn a new asset workflow at the new identifier; archive the old branch
   (`refs/archive/...`)
 |===
 
-The controller's slug-renaming behavior is the same: a slug change
+The controller's identifier-renaming behavior is the same: an identifier change
 forks a new identity; the old branch is archived rather than rewritten.
 
 == Pairing assignment
@@ -342,11 +342,11 @@ the asset's role.
 [source,asciidoc]
 ------
 = <Element name> — <asset role>
-:slug: <project-slug>.<element-path>.<asset-key>
+:identifier: <project-identifier>.<element-path>.<asset-key>
 :dsl-element: api.authComp                <1>
 :dsl-tag: component-auth                  <2>
 :phase: spec
-:branch: agent/<project-slug>/<element-path>/<asset-key>
+:branch: agent/<project-identifier>/<element-path>/<asset-key>
 :status: ◎
 :pairing: implementer-with-bdd-tests      // optional; see "Pairing assignment"
 
@@ -376,7 +376,7 @@ attempt.>
 <1> Back-reference to the DSL element by its DSL identifier (the
     variable name in the DSL, e.g. `api.authComp`). Used by tooling
     that walks DSL → asset mapping in reverse. May change if the DSL
-    is refactored; the load-bearing identity is `:slug:` and `:dsl-tag:`.
+    is refactored; the load-bearing identity is `:identifier:` and `:dsl-tag:`.
 <2> The tag name marking the element in the DSL block. Stable identifier
     for the controller's `include::index.adoc[tag=<name>]` extraction
     (R14.14).
@@ -391,7 +391,7 @@ the agent has no permission to write code.
 [source,asciidoc]
 ------
 = Auth Middleware — Implementation
-:slug: notification-platform.api.auth-middleware.impl
+:identifier: notification-platform.api.auth-middleware.impl
 :dsl-element: api.authComp
 :dsl-tag: component-auth
 :phase: spec                              // becomes :phase: impl on transition
@@ -430,7 +430,7 @@ the BDD scenarios and writes code to the `writable_globs`.
 
 The folder is flat; the C4 hierarchy is carried in Git branch names.
 Branches are slash-nested mirroring the DSL element-path (chain of
-slug properties), with a trailing segment that is either `_index` (for
+identifier properties), with a trailing segment that is either `_index` (for
 index-evolution branches) or an asset key (for asset branches).
 
 The `_index` suffix (R14.6) is mandatory: Git's loose-ref storage at
@@ -443,20 +443,20 @@ The `_index` leaf marker keeps every branch a leaf.
 | File / asset | Branch
 
 | `index.adoc` (the only canonical index branch; R14.7)
-| `agent/<project-slug>/_index`
+| `agent/<project-identifier>/_index`
 
 | `auth-middleware.adoc` (`detail` asset for `authComp`)
-| `agent/<project-slug>/api/auth-middleware/detail`
+| `agent/<project-identifier>/api/auth-middleware/detail`
 
 | `auth-bdd.adoc` (`bdd` asset)
-| `agent/<project-slug>/api/auth-middleware/bdd`
+| `agent/<project-identifier>/api/auth-middleware/bdd`
 
 | `auth-impl.adoc` (`impl` asset)
-| `agent/<project-slug>/api/auth-middleware/impl`
+| `agent/<project-identifier>/api/auth-middleware/impl`
 |===
 
 There are NO sub-branches editing `index.adoc` itself; per R14.7, all
-index evolution serialises on the single `agent/<project-slug>/_index`
+index evolution serialises on the single `agent/<project-identifier>/_index`
 branch. This avoids the canonicality problem ("which branch's
 `index.adoc` is the source of truth?") that multi-branch index editing
 would create.
@@ -481,7 +481,7 @@ git branch -l 'agent/notification-platform/**/bdd'
 git branch -l 'agent/notification-platform/_index'
 ----
 
-The dotted slug form used in trailers (`Task: notification-platform.api.auth-middleware.detail`)
+The dotted identifier form used in trailers (`Task: notification-platform.api.auth-middleware.detail`)
 is derived from the slash-nested branch by replacing `/` with `.` after
 the `agent/` prefix and dropping the `_index` suffix when present.
 
@@ -562,7 +562,7 @@ this format (R14.8):
 |===
 | Attribute | Git trailer | Notes
 
-| `:slug:` | `Task:` | Dotted form derived from branch path (drop `_index` if present)
+| `:identifier:` | `Task:` | Dotted form derived from branch path (drop `_index` if present)
 | `:phase:` | `Phase:` | New trailer (R14.8)
 | `:branch:` | (implicit; the branch the trailers are on) |
 | `:status:` | derived from latest `Try-Status:` | Controller-spec vocabulary
@@ -580,7 +580,7 @@ the `:branch:`, fully regenerable per controller-spec R8.1.
 == Stability gradient (depth-scaled circuit-breaker defaults)
 
 Circuit-breaker thresholds default by C4 element type, not by branch
-slash-count (R14.11). This avoids fragility from slugs that contain
+slash-count (R14.11). This avoids fragility from identifiers that contain
 slashes or unusual project-name nesting.
 
 [%autowidth]
@@ -607,7 +607,7 @@ A minimal but complete project. Three files: `index.adoc`,
 [source,asciidoc]
 ------
 = Notification Platform
-:slug: notification-platform
+:identifier: notification-platform
 :phase: spec
 :branch: agent/notification-platform/_index
 :status: ●
@@ -620,26 +620,26 @@ multi-channel user notifications with per-user preferences.
 workspace "Notification Platform" {
     model {
         endUser = person "End User" {
-            properties { "slug" "end-user" }
+            properties { "identifier" "end-user" }
         }
         engineer = person "Product Engineer" {
-            properties { "slug" "product-engineer" }
+            properties { "identifier" "product-engineer" }
         }
         iam = softwareSystem "IAM" {
             tags "External"
-            properties { "slug" "iam" }
+            properties { "identifier" "iam" }
         }
 
         // tag::system[]
         platform = softwareSystem "Notification Platform" {
-            properties { "slug" "notification-platform" }
+            properties { "identifier" "notification-platform" }
 
             // tag::container-web[]
             web = container "Web App" {
                 technology "React + TypeScript"
                 properties {
-                    "slug"   "web"
-                    "detail" "web-app.adoc"
+                    "identifier" "web"
+                    "detail"     "web-app.adoc"
                 }
             }
             // end::container-web[]
@@ -648,17 +648,17 @@ workspace "Notification Platform" {
             api = container "API Server" {
                 technology "Fastify (TypeScript)"
                 properties {
-                    "slug"   "api"
-                    "detail" "api-server.adoc"
+                    "identifier" "api"
+                    "detail"     "api-server.adoc"
                 }
 
                 // tag::component-auth[]
                 authComp = component "Auth Middleware" {
                     technology "JWT verification"
                     properties {
-                        "slug"   "auth-middleware"
-                        "detail" "auth-middleware.adoc"
-                        "bdd"    "auth-bdd.adoc"
+                        "identifier" "auth-middleware"
+                        "detail"     "auth-middleware.adoc"
+                        "bdd"        "auth-bdd.adoc"
                     }
                 }
                 // end::component-auth[]
@@ -687,7 +687,7 @@ workspace "Notification Platform" {
 [source,asciidoc]
 ------
 = Auth Middleware — Detail
-:slug: notification-platform.api.auth-middleware.detail
+:identifier: notification-platform.api.auth-middleware.detail
 :dsl-element: api.authComp
 :dsl-tag: component-auth
 :phase: spec
@@ -731,7 +731,7 @@ xref:auth-bdd.adoc[Auth Middleware BDD] — sibling BDD asset.
 [source,asciidoc]
 ------
 = Auth Middleware — BDD
-:slug: notification-platform.api.auth-middleware.bdd
+:identifier: notification-platform.api.auth-middleware.bdd
 :dsl-element: api.authComp
 :dsl-tag: component-auth
 :phase: spec
@@ -777,7 +777,7 @@ xref:auth-middleware.adoc[Auth Middleware Detail] — sibling spec.
 | Custom inline macros (`branch:[]`, `commit:[]`) | Plain `xref:` plus tagged regions cover the cases that matter.
 | Multiple assets of the same standard role per DSL element (R14.13) | If you need two `bdd` files for one component, that's a signal to decompose the component. Custom keys (`"bdd-main"`, `"bdd-edge"`) handle the residual case without inventing new mechanisms.
 | Concurrent index branches | Per R14.7, all index evolution serialises on `agent/<project>/_index`. Multi-branch index editing creates an unresolved canonicality problem.
-| Cascade rollback when an upstream slug changes | Per R14.9, slug renames spawn a new branch and archive the old. Cascade reversion of dependents stays human-driven (controller-spec R12.7).
+| Cascade rollback when an upstream identifier changes | Per R14.9, identifier renames spawn a new branch and archive the old. Cascade reversion of dependents stays human-driven (controller-spec R12.7).
 | Orchestrator agent design (catalogue lookup, inference rules, fallback) | This format only ensures the orchestrator has enough metadata (`technology`, asset key, `:phase:`, `"skills"`); how it picks a pairing is a separate spec to be brainstormed in its own session.
 |===
 
@@ -787,7 +787,7 @@ xref:auth-middleware.adoc[Auth Middleware Detail] — sibling spec.
 |===
 | Feature | Use here
 
-| Document attributes | Per-file metadata (slug, phase, branch, dsl-element, dsl-tag).
+| Document attributes | Per-file metadata (identifier, phase, branch, dsl-element, dsl-tag).
 | `[source,structurizr]` blocks | Embedded canonical DSL inside `index.adoc`.
 | Tag comments inside source blocks (`// tag::name[]`) | Mark individual DSL elements for inclusion and anchor reference.
 | `include::other.adoc[tag=name]` | Controller-driven content extraction of a specific DSL element (R14.14).

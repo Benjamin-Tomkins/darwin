@@ -353,18 +353,16 @@ Always show the derived identifier and confirm before using it.
 
 ### Saving state
 
-When the user says "stop", "save", or "save progress" at any phase boundary, write `<plan-dir>/.plan-software-state.json` and respond:
+When the user says "stop", "save", or "save progress" at any phase boundary:
 
-```
-Saved. Resume with: /darwin:plan-software --resume <plan-dir>
-```
+- If `plan_dir` has been determined (phase 2 onwards), write to `<plan-dir>/.plan-software-state.json` and respond: `Saved. Resume with: /darwin:plan-software --resume <plan-dir>`
+- If `plan_dir` is not yet known (phase 1 only), write to `.plan-software-state.json` in the current directory and respond: `Saved. Resume with: /darwin:plan-software --resume .`
 
 **State file schema** — mirrors the Structurizr DSL hierarchy (`workspace → model → softwareSystem → container → component`). Write all keys collected so far; omit sections not yet reached.
 
 ```json
 {
   "version": 1,
-  "last_completed_phase": "Gather project details",
   "completed_phases": ["Explore existing plans", "Gather project details"],
   "workspace": {
     "name": "Payment Service",
@@ -374,14 +372,16 @@ Saved. Resume with: /darwin:plan-software --resume <plan-dir>
   },
   "model": {
     "persons": [
-      { "name": "Merchant", "identifier": "merchant", "description": "Business owner accepting payments" }
+      { "name": "Merchant", "description": "Business owner accepting payments" }
+    ],
+    "externalSystems": [
+      { "name": "Stripe", "identifier": "stripe", "description": "Payment processing API" }
     ],
     "softwareSystems": [
       {
         "name": "Payment Service",
         "identifier": "payment-service",
         "description": "Core payment platform",
-        "external": false,
         "containers": [
           {
             "name": "API",
@@ -394,12 +394,6 @@ Saved. Resume with: /darwin:plan-software --resume <plan-dir>
             ]
           }
         ]
-      },
-      {
-        "name": "Stripe",
-        "identifier": "stripe",
-        "description": "Payment processing API",
-        "external": true
       }
     ]
   },
@@ -411,10 +405,11 @@ Saved. Resume with: /darwin:plan-software --resume <plan-dir>
 ```
 
 Field notes:
-- `workspace.identifier` — the DSL workspace identifier used in `workspace "<identifier>"` and Darwin branch names
-- `workspace.description` — maps to DSL `description` property
-- `model.persons` — DSL `person` elements (users/actors); prose-only, no tasks
-- `model.softwareSystems` — DSL `softwareSystem` elements; `external: true` for third-party systems
+- `workspace.identifier` — Darwin branch-path root; appears as the first segment in `agent/<identifier>/...` branch names
+- `workspace.description` — maps to the `== Overview` prose section in `index.adoc`; not a DSL property
+- `model.persons` — users/actors; prose-only (`== Users` section), never appear in the DSL
+- `model.externalSystems` — third-party connections; prose-only (`== External connections` section), never appear in the DSL
+- `model.softwareSystems` — implementation-eligible systems only; each becomes a DSL `softwareSystem` block
 - `containers[].tags` — DSL `tags` values; Darwin uses `app`, `service`, `worker`, `store`, `gateway` to determine task eligibility
 - `containers[].technology` — DSL `technology` property
 - `assets` — Darwin-specific; keyed by `identifier`, drives which `.adoc` stubs and pairings are generated
@@ -427,6 +422,6 @@ When invoked as `/darwin:plan-software --resume <plan-dir>`:
 
 1. Read `<plan-dir>/.plan-software-state.json`
 2. If the file does not exist, say: `No saved state at <plan-dir>/.plan-software-state.json — starting fresh.` and begin from phase 1
-3. Otherwise, show: `Resuming <workspace.name> — last completed: <last_completed_phase>`
-4. Mark all phases in `completed_phases` as done in TaskCreate
-5. Continue from the next phase after `last_completed_phase`, treating all saved values as already-answered (skip those questions)
+3. Otherwise, show: `Resuming <workspace.name> — last completed: <last entry in completed_phases>`
+4. Create all 7 tasks with TaskCreate, then immediately mark every phase in `completed_phases` as complete
+5. Continue from the next phase after the last entry in `completed_phases`, treating all saved values as already-answered (skip those questions)

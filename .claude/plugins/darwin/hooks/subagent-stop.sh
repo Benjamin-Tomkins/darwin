@@ -35,10 +35,11 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
   read -r AGENT_INPUT AGENT_OUTPUT AGENT_THINKING < <(jq -nr '
     reduce inputs as $line (
       {input: 0, output: 0, thinking: 0};
-      if ($line | has("usage")) then
-        .input    += ($line.usage.input_tokens    // 0 | floor) |
-        .output   += ($line.usage.output_tokens   // 0 | floor) |
-        .thinking += ($line.usage.thinking_tokens // 0 | floor)
+      ($line.usage // $line.message.usage // null) as $u |
+      if $u != null then
+        .input    += ($u.input_tokens    // 0 | floor) |
+        .output   += ($u.output_tokens   // 0 | floor) |
+        .thinking += ($u.thinking_tokens // 0 | floor)
       else . end
     ) | [.input, .output, .thinking] | @tsv
   ' "$TRANSCRIPT_PATH")

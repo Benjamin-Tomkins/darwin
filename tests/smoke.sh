@@ -207,6 +207,16 @@ for p in implementer-with-tests test-author doc-writer; do
   fi
 done
 
+# ── 9. subagent-stop token extraction ────────────────────────────────────
+
+echo ""
+echo "--- 9. subagent-stop token extraction"
+if bash "$PLUGIN/hooks/tests/subagent-stop.test.sh" 2>/dev/null; then
+  ok "subagent-stop: token extraction from fixture transcript"
+else
+  fail "subagent-stop: token extraction failed — run hooks/tests/subagent-stop.test.sh for details"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────
 
 echo ""

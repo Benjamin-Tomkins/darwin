@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"implement this"}}
+{"type":"assistant","message":{"role":"assistant","content":"ok","usage":{"input_tokens":120,"output_tokens":40,"cache_creation_input_tokens":0,"cache_read_input_tokens":800}}}
+{"type":"assistant","message":{"role":"assistant","content":"done","usage":{"input_tokens":200,"output_tokens":60,"cache_creation_input_tokens":0,"cache_read_input_tokens":1200}}}
+{"usage":{"input_tokens":50,"output_tokens":20,"thinking_tokens":15}}

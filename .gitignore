@@ -19,3 +19,6 @@
 
 # Exclude node_modules inside the plugin helpers
 .claude/plugins/darwin/helpers/c4/node_modules/
+
+.DS_Store
+*.pdf

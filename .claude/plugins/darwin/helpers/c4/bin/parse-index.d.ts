@@ -1,14 +1,14 @@
 export interface DarwinElement {
-    slug: string;
+    identifier: string;
     type: string;
     name: string;
     description: string;
-    /** Asset-reference keys (impl, tests, bdd, detail) and metadata keys (slug, skills). */
+    /** Asset-reference keys (impl, tests, bdd, detail) and metadata keys (identifier, skills). */
     properties: Record<string, string>;
     children: DarwinElement[];
 }
 export interface ElementTree {
-    projectSlug: string;
+    projectIdentifier: string;
     elements: DarwinElement[];
 }
 export declare function extractStructurizrBlock(adoc: string): string;

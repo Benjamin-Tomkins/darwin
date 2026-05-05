@@ -91,17 +91,17 @@ echo "--- 3. parse-index.js"
 PARSE_OUT=$($EXEC $FLAGS "$HELPERS/bin/parse-index.js" --file "$FIXTURE" 2>&1)
 if echo "$PARSE_OUT" | jq . >/dev/null 2>&1; then
   ok "parse-index.js output is valid JSON"
-  PROJECT_SLUG=$(echo "$PARSE_OUT" | jq -r '.projectSlug')
-  if [ "$PROJECT_SLUG" = "hello-world" ]; then ok "projectSlug = hello-world"
-  else fail "projectSlug = $PROJECT_SLUG (expected hello-world)"; fi
+  PROJECT_IDENTIFIER=$(echo "$PARSE_OUT" | jq -r '.projectIdentifier')
+  if [ "$PROJECT_IDENTIFIER" = "hello-world" ]; then ok "projectIdentifier = hello-world"
+  else fail "projectIdentifier = $PROJECT_IDENTIFIER (expected hello-world)"; fi
 
   ELEM_COUNT=$(echo "$PARSE_OUT" | jq '.elements | length')
   if [ "$ELEM_COUNT" -eq 1 ]; then ok "found 1 top-level element"
   else fail "found $ELEM_COUNT top-level elements (expected 1)"; fi
 
-  ELEM_SLUG=$(echo "$PARSE_OUT" | jq -r '.elements[0].slug')
-  if [ "$ELEM_SLUG" = "greeter" ]; then ok "element slug = greeter"
-  else fail "element slug = $ELEM_SLUG (expected greeter)"; fi
+  ELEM_IDENTIFIER=$(echo "$PARSE_OUT" | jq -r '.elements[0].identifier')
+  if [ "$ELEM_IDENTIFIER" = "greeter" ]; then ok "element identifier = greeter"
+  else fail "element identifier = $ELEM_IDENTIFIER (expected greeter)"; fi
 
   IMPL=$(echo "$PARSE_OUT" | jq -r '.elements[0].properties.impl')
   if [ "$IMPL" = "greeter-impl.adoc" ]; then ok "impl property = greeter-impl.adoc"
@@ -111,9 +111,9 @@ if echo "$PARSE_OUT" | jq . >/dev/null 2>&1; then
   if [ "$CHILD_COUNT" -eq 1 ]; then ok "found 1 child element"
   else fail "found $CHILD_COUNT children (expected 1)"; fi
 
-  CHILD_SLUG=$(echo "$PARSE_OUT" | jq -r '.elements[0].children[0].slug')
-  if [ "$CHILD_SLUG" = "api" ]; then ok "child slug = api"
-  else fail "child slug = $CHILD_SLUG (expected api)"; fi
+  CHILD_IDENTIFIER=$(echo "$PARSE_OUT" | jq -r '.elements[0].children[0].identifier')
+  if [ "$CHILD_IDENTIFIER" = "api" ]; then ok "child identifier = api"
+  else fail "child identifier = $CHILD_IDENTIFIER (expected api)"; fi
 else
   fail "parse-index.js failed: $PARSE_OUT"
 fi
@@ -130,9 +130,9 @@ check_branch() {
   else fail "$desc → $actual (expected $expected)"; fi
 }
 
-check_branch "single slug"          "agent/hello-world"              '["hello-world"]'
-check_branch "single slug + asset"  "agent/hello-world/greeter/impl" '["hello-world","greeter"]' --asset impl
-check_branch "three-level chain"    "agent/a/b/c/tests"              '["a","b","c"]' --asset tests
+check_branch "single identifier"           "agent/hello-world"              '["hello-world"]'
+check_branch "single identifier + asset"   "agent/hello-world/greeter/impl" '["hello-world","greeter"]' --asset impl
+check_branch "three-level identifier chain" "agent/a/b/c/tests"              '["a","b","c"]' --asset tests
 
 # ── 5. vitest unit tests ──────────────────────────────────────────────────
 

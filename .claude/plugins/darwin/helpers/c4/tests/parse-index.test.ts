@@ -25,9 +25,9 @@ describe('extractStructurizrBlock', () => {
 });
 
 describe('parseIndex — hello-world fixture', () => {
-  it('returns the correct project slug', () => {
+  it('returns the correct project identifier', () => {
     const tree = parseIndex(FIXTURE);
-    expect(tree.projectSlug).toBe('hello-world');
+    expect(tree.projectIdentifier).toBe('hello-world');
   });
 
   it('finds the top-level softwareSystem element', () => {
@@ -36,7 +36,7 @@ describe('parseIndex — hello-world fixture', () => {
     const sys = tree.elements[0];
     expect(sys.type).toBe('softwareSystem');
     expect(sys.name).toBe('Greeter');
-    expect(sys.slug).toBe('greeter');
+    expect(sys.identifier).toBe('greeter');
   });
 
   it('extracts asset-reference properties on the softwareSystem', () => {
@@ -45,8 +45,8 @@ describe('parseIndex — hello-world fixture', () => {
       impl: 'greeter-impl.adoc',
       tests: 'greeter-tests.adoc',
     });
-    // slug must NOT appear in properties — it's lifted to the slug field
-    expect(sys.properties).not.toHaveProperty('slug');
+    // identifier must NOT appear in properties — it's lifted to the identifier field
+    expect(sys.properties).not.toHaveProperty('identifier');
   });
 
   it('finds the nested container child', () => {
@@ -54,7 +54,7 @@ describe('parseIndex — hello-world fixture', () => {
     expect(sys.children).toHaveLength(1);
     const container = sys.children[0];
     expect(container.type).toBe('container');
-    expect(container.slug).toBe('api');
+    expect(container.identifier).toBe('api');
     expect(container.properties.impl).toBe('api-impl.adoc');
   });
 

@@ -56,8 +56,8 @@ If any exist, show them and ask whether to start fresh or extend one.
 Ask in sequence (one per turn):
 
 1. **Project name** — display name, e.g. "Payment Service"
-2. **Slug** — auto-derive from the name (lowercase, spaces→hyphens). Show it: "I'll use `<slug>` as the identifier — looks good?" (yes / change to X)
-3. **Plan directory** — default `plans/<slug>/`. Show and confirm.
+2. **Identifier** — auto-derive from the name (lowercase, spaces→hyphens). Show it: "I'll use `<identifier>` as the identifier — looks good?" (yes / change to X)
+3. **Plan directory** — default `plans/<identifier>/`. Show and confirm.
 4. **One-line overview** — "What does this system do?"
 
 Write nothing to disk yet.
@@ -96,7 +96,7 @@ After all three, show a text summary and ask to confirm:
 
 ```
 Big picture:
-  Product(s):  <name> (<slug>)
+  Product(s):  <name> (<identifier>)
   Users:       <list or none>
   Connects to: <list or none>
 
@@ -120,7 +120,7 @@ List them (e.g. 'REST API, React frontend, PostgreSQL database, background worke
 
 For each piece, collect (one turn per piece if there are several; batch if only 1-2):
 - Display name
-- Slug (auto-derive, confirm)
+- Identifier (auto-derive, confirm)
 - Technology (optional — "What technology? e.g. Node.js, PostgreSQL — skip if unsure")
 - One-line responsibility ("What does it do?")
 
@@ -137,7 +137,7 @@ Show summary after all pieces for a product:
 
 ```
 Applications & services in <Product>:
-  <slug>     <Name> (<category>) — <description>
+  <identifier>    <Name> (<category>) — <description>
   ...
 
 Confirm? (yes / revise)
@@ -158,7 +158,7 @@ Think: controllers, service classes, repositories, adapters, middleware layers.
 A) Yes — list them (e.g. 'OrderController, PaymentAdapter, OrderRepository')
 B) No — it's straightforward enough as-is"
 
-If A: for each module collect name, slug (auto-derive, confirm), one-line responsibility.
+If A: for each module collect name, identifier (auto-derive, confirm), one-line responsibility.
 
 Show summary per service, confirm. It is fine and common to say No to all.
 
@@ -186,7 +186,7 @@ E) Skip — no task needed
 After collecting all choices, ask:
 
 **"How should I name the pairing configurations?**
-A) One shared pairing for all tasks (name: `<project-slug>`)
+A) One shared pairing for all tasks (name: `<project-identifier>`)
 B) Separate pairings per element — I'll ask as we go"
 
 For option B, ask the pairing name for each element that has an implementation task.
@@ -206,7 +206,7 @@ Build all file content in memory, then write to disk in one pass.
 
 [source,structurizr]
 ------
-workspace "<project-slug>" {
+workspace "<project-identifier>" {
   model {
 <softwareSystem blocks, nested containers/components>
   }
@@ -229,12 +229,12 @@ workspace "<project-slug>" {
 Use six-dash `------` delimiters for the outer source block so inner `----` blocks don't prematurely close it.
 
 **DSL rules:**
-- Only elements with implementation tasks appear in the DSL (they need slugs and asset properties).
-- Users and external connections go in the Overview prose sections only — they have no slug and no tasks.
+- Only elements with implementation tasks appear in the DSL (they need identifiers and asset properties).
+- Users and external connections go in the Overview prose sections only — they have no identifier and no tasks.
 - Nest services/workers/apps inside their parent softwareSystem block (as `container` elements).
 - Nest internal modules inside their parent container block (as `component` elements).
-- Every element in the DSL must have a `slug` property.
-- Asset property keys: `impl`, `tests`, `bdd`, `detail`. Metadata keys: `slug`, `skills`.
+- Every element in the DSL must have an `identifier` property.
+- Asset property keys: `impl`, `tests`, `bdd`, `detail`. Metadata keys: `identifier`, `skills`.
 - Stores (databases, queues) only appear in the DSL if they have a task (rare — usually custom stores).
 
 **Example DSL:**
@@ -242,24 +242,24 @@ Use six-dash `------` delimiters for the outer source block so inner `----` bloc
 ```
 softwareSystem "Payment Service" "Processes card payments" {
   properties {
-    slug payment-service
+    identifier payment-service
   }
   container "API" "HTTP REST interface" {
     properties {
-      slug api
+      identifier api
       impl api-impl.adoc
       tests api-tests.adoc
     }
     component "PaymentAdapter" "Stripe integration" {
       properties {
-        slug payment-adapter
+        identifier payment-adapter
         impl payment-adapter-impl.adoc
       }
     }
   }
   container "Worker" "Background job processor" {
     properties {
-      slug worker
+      identifier worker
       impl worker-impl.adoc
       tests worker-tests.adoc
     }
@@ -334,9 +334,9 @@ Do NOT run /darwin:worktree automatically.
 
 ---
 
-## Slug Rules
+## Identifier Rules
 
-Auto-derive slugs from display names:
+Auto-derive identifiers from display names:
 - Lowercase
 - Spaces and underscores → hyphens
 - Strip all non-alphanumeric except hyphens
@@ -345,7 +345,7 @@ Auto-derive slugs from display names:
 
 Examples: "API Server" → `api-server`, "User_Auth" → `user-auth`, "PostgreSQL DB" → `postgresql-db`
 
-Always show the derived slug and confirm before using it.
+Always show the derived identifier and confirm before using it.
 
 ---
 

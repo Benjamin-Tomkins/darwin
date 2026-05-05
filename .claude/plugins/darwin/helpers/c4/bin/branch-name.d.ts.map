@@ -1,1 +1,1 @@
-{"version":3,"file":"branch-name.d.ts","sourceRoot":"","sources":["../src/branch-name.ts"],"names":[],"mappings":"AAIA;;;;;;;GAOG;AACH,wBAAgB,UAAU,CAAC,SAAS,EAAE,MAAM,EAAE,EAAE,KAAK,CAAC,EAAE,MAAM,GAAG,MAAM,CAKtE"}
+{"version":3,"file":"branch-name.d.ts","sourceRoot":"","sources":["../src/branch-name.ts"],"names":[],"mappings":"AAIA;;;;;;;GAOG;AACH,wBAAgB,UAAU,CAAC,eAAe,EAAE,MAAM,EAAE,EAAE,KAAK,CAAC,EAAE,MAAM,GAAG,MAAM,CAK5E"}

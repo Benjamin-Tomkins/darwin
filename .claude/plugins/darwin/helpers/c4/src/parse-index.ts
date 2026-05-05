@@ -5,17 +5,17 @@ import { resolve } from 'path';
 // ── Public types ───────────────────────────────────────────────────────────
 
 export interface DarwinElement {
-  slug: string;
+  identifier: string;
   type: string;
   name: string;
   description: string;
-  /** Asset-reference keys (impl, tests, bdd, detail) and metadata keys (slug, skills). */
+  /** Asset-reference keys (impl, tests, bdd, detail) and metadata keys (identifier, skills). */
   properties: Record<string, string>;
   children: DarwinElement[];
 }
 
 export interface ElementTree {
-  projectSlug: string;
+  projectIdentifier: string;
   elements: DarwinElement[];
 }
 
@@ -134,8 +134,8 @@ class Parser {
   parseWorkspace(): ElementTree {
     this.skipNl();
     this.expect('WORD', 'workspace');
-    const slugTok = this.next(); // string or bare word
-    const projectSlug = slugTok.value;
+    const identifierTok = this.next(); // string or bare word
+    const projectIdentifier = identifierTok.value;
     this.skipNl();
     this.expect('LBRACE');
 
@@ -152,7 +152,7 @@ class Parser {
       }
     }
 
-    return { projectSlug, elements };
+    return { projectIdentifier, elements };
   }
 
   parseModel(): DarwinElement[] {
@@ -198,7 +198,7 @@ class Parser {
     ) this.next();
 
     const properties: Record<string, string> = {};
-    let slug = '';
+    let identifier = '';
     const children: DarwinElement[] = [];
 
     if (this.peek().type === 'LBRACE') {
@@ -211,11 +211,11 @@ class Parser {
 
         if (tok.type === 'WORD' && tok.value === 'properties') {
           const props = this.parseProperties();
-          if ('slug' in props) { slug = props.slug; delete props.slug; }
+          if ('identifier' in props) { identifier = props.identifier; delete props.identifier; }
           Object.assign(properties, props);
         } else if (tok.type === 'WORD' && tok.value === 'tags') {
-          const tagSlug = this.parseTags();
-          if (tagSlug) slug = tagSlug;
+          const tagIdentifier = this.parseTags();
+          if (tagIdentifier) identifier = tagIdentifier;
         } else if (tok.type === 'WORD' && ELEMENT_KEYWORDS.has(tok.value)) {
           children.push(this.parseElement());
         } else {
@@ -226,7 +226,7 @@ class Parser {
       this.expect('RBRACE');
     }
 
-    return { slug, type, name, description, properties, children };
+    return { identifier, type, name, description, properties, children };
   }
 
   parseProperties(): Record<string, string> {
@@ -256,14 +256,14 @@ class Parser {
 
   parseTags(): string | null {
     this.expect('WORD', 'tags');
-    let slugTag: string | null = null;
+    let identifierTag: string | null = null;
     while (this.peek().type === 'STRING' || this.peek().type === 'WORD') {
       const val = this.next().value;
-      const m = val.match(/^slug=(.+)$/);
-      if (m) slugTag = m[1];
+      const m = val.match(/^identifier=(.+)$/);
+      if (m) identifierTag = m[1];
     }
     this.skipToEol();
-    return slugTag;
+    return identifierTag;
   }
 }
 

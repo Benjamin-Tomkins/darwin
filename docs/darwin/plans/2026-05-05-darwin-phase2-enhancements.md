@@ -552,7 +552,7 @@ Saved. Resume with: /darwin:plan-software --resume <plan-dir>
 ```
 
 Field notes:
-- `workspace.identifier` — the slug used in DSL `workspace "<identifier>"` and Darwin branch names
+- `workspace.identifier` — the DSL workspace identifier used in `workspace "<identifier>"` and Darwin branch names
 - `workspace.description` — maps to DSL `description` property
 - `model.persons` — DSL `person` elements (users/actors); prose-only, no tasks
 - `model.softwareSystems` — DSL `softwareSystem` elements; `external: true` for third-party systems

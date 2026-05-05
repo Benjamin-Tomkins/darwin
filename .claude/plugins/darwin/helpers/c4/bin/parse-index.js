@@ -131,8 +131,8 @@ class Parser {
     parseWorkspace() {
         this.skipNl();
         this.expect('WORD', 'workspace');
-        const slugTok = this.next(); // string or bare word
-        const projectSlug = slugTok.value;
+        const identifierTok = this.next(); // string or bare word
+        const projectIdentifier = identifierTok.value;
         this.skipNl();
         this.expect('LBRACE');
         let elements = [];
@@ -148,7 +148,7 @@ class Parser {
                 this.skipStatement();
             }
         }
-        return { projectSlug, elements };
+        return { projectIdentifier, elements };
     }
     parseModel() {
         this.expect('WORD', 'model');
@@ -189,7 +189,7 @@ class Parser {
             !this.atBlockEnd())
             this.next();
         const properties = {};
-        let slug = '';
+        let identifier = '';
         const children = [];
         if (this.peek().type === 'LBRACE') {
             this.expect('LBRACE');
@@ -200,16 +200,16 @@ class Parser {
                 const tok = this.peek();
                 if (tok.type === 'WORD' && tok.value === 'properties') {
                     const props = this.parseProperties();
-                    if ('slug' in props) {
-                        slug = props.slug;
-                        delete props.slug;
+                    if ('identifier' in props) {
+                        identifier = props.identifier;
+                        delete props.identifier;
                     }
                     Object.assign(properties, props);
                 }
                 else if (tok.type === 'WORD' && tok.value === 'tags') {
-                    const tagSlug = this.parseTags();
-                    if (tagSlug)
-                        slug = tagSlug;
+                    const tagIdentifier = this.parseTags();
+                    if (tagIdentifier)
+                        identifier = tagIdentifier;
                 }
                 else if (tok.type === 'WORD' && ELEMENT_KEYWORDS.has(tok.value)) {
                     children.push(this.parseElement());
@@ -220,7 +220,7 @@ class Parser {
             }
             this.expect('RBRACE');
         }
-        return { slug, type, name, description, properties, children };
+        return { identifier, type, name, description, properties, children };
     }
     parseProperties() {
         this.expect('WORD', 'properties');
@@ -246,15 +246,15 @@ class Parser {
     }
     parseTags() {
         this.expect('WORD', 'tags');
-        let slugTag = null;
+        let identifierTag = null;
         while (this.peek().type === 'STRING' || this.peek().type === 'WORD') {
             const val = this.next().value;
-            const m = val.match(/^slug=(.+)$/);
+            const m = val.match(/^identifier=(.+)$/);
             if (m)
-                slugTag = m[1];
+                identifierTag = m[1];
         }
         this.skipToEol();
-        return slugTag;
+        return identifierTag;
     }
 }
 // ── Public API ─────────────────────────────────────────────────────────────

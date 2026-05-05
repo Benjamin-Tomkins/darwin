@@ -9,7 +9,7 @@ You are the Ralph loop controller. Drive the loop to completion for all tasks in
 
 ## Output format
 
-Use TaskCreate at startup — one task per plan element being executed, named by slug (e.g. `api-impl`, `worker-tests`). Mark each in_progress when the agent is spawned and completed when `●`. The native task list shows progress automatically.
+Use TaskCreate at startup — one task per plan element being executed, named by identifier (e.g. `api-impl`, `worker-tests`). Mark each in_progress when the agent is spawned and completed when `●`. The native task list shows progress automatically.
 
 Every status update to the user is one line. No verbose narration between loop steps.
 
@@ -41,14 +41,14 @@ For each `pairing.yaml` found:
 ## Usage
 
 ```
-/darwin:worktree <plan.adoc> [--base <ref>] [--resume <slug>]
-/darwin:worktree --c4 <plan-dir> [--base <ref>] [--resume <slug>]
-/darwin:worktree --resume <slug>
+/darwin:worktree <plan.adoc> [--base <ref>] [--resume <identifier>]
+/darwin:worktree --c4 <plan-dir> [--base <ref>] [--resume <identifier>]
+/darwin:worktree --resume <identifier>
 ```
 
 - `<plan.adoc>` — path to an AsciiDoc plan file, or a directory containing `index.adoc`.
 - `--base <ref>` — base git ref for new agent branches. Defaults to `HEAD`.
-- `--resume <slug>` — re-enter the loop for a specific task slug (after a HANDOFF or context-limit stop).
+- `--resume <identifier>` — re-enter the loop for a specific task identifier (after a HANDOFF or context-limit stop).
 - `--c4 <plan-dir>` — parse the plan in C4 format (embedded Structurizr DSL in `index.adoc`).
 
 **If no plan argument is provided**, auto-discover before asking the user:
@@ -76,7 +76,7 @@ Parse `index.adoc` into an element tree. If `--c4 <plan-dir>` was passed, the fi
 $EXEC $FLAGS $PLUGIN/helpers/c4/bin/parse-index.js --file <plan.adoc>
 ```
 
-Store the JSON result as ELEMENT_TREE. Each element has: `slug`, `type`, `properties` (object of key → filename or inline value), `children` (array of child elements).
+Store the JSON result as ELEMENT_TREE. Each element has: `identifier`, `type`, `properties` (object of key → filename or inline value), `children` (array of child elements).
 
 If `--c4` was passed, the DSL block is embedded in `index.adoc`; `parse-index` handles this automatically.
 
@@ -116,11 +116,11 @@ Co-evolving pairs run as concurrent Ralph loops. The tests gate (Step 10) is enf
 Construct a queue of (element, property-key) task tuples:
 - Elements in **unordered** AsciiDoc list (`*`) → add to parallel pool (fan out concurrently).
 - Elements in **ordered** AsciiDoc list (`.`) → add to serial queue (sequence on upstream `●`).
-- If an element has `depends_on:` in its `[task]` block, do not start it until all named upstream slugs are `●`.
+- If an element has `depends_on:` in its `[task]` block, do not start it until all named upstream identifiers are `●`.
 
 Skip any task whose asset branch already has `Try-Status: pass` as its latest non-rollback commit.
 
-If `--resume <slug>` was passed, verify the slug exists in ELEMENT_TREE. If not found, halt with: `Resume slug '<slug>' not found in plan. Check for slug renames or typos.` If found, include only the named task and its dependents.
+If `--resume <identifier>` was passed, verify the identifier exists in ELEMENT_TREE. If not found, halt with: `Resume identifier '<identifier>' not found in plan. Check for identifier renames or typos.` If found, include only the named task and its dependents.
 
 If the queue is empty after applying all filters, report `No tasks to run — all tasks are already ●` and stop.
 
@@ -131,7 +131,7 @@ If the queue is empty after applying all filters, report `No tasks to run — al
 For each task, derive the canonical branch name using the `branch-name` helper:
 
 ```bash
-$EXEC $FLAGS $PLUGIN/helpers/c4/bin/branch-name.js <slug-chain-json>
+$EXEC $FLAGS $PLUGIN/helpers/c4/bin/branch-name.js <identifier-chain-json>
 # e.g. branch-name.js '["project","container","auth"]' --asset impl
 # → agent/project/container/auth/impl
 ```
@@ -178,14 +178,14 @@ print('sha256:' + hashlib.sha256(canon.encode()).hexdigest())
 "
 ```
 
-If the computed hash differs from `pairing_hash` in the task's state (and `pairing_hash` is not empty → this is not the first attempt), AND the latest commit on the branch does NOT have `Phase-Transition: true` as a trailer, halt: "Pairing hash drift on task <slug> — pairing was edited mid-run. Restore the pinned version or migrate to a new branch. (R7.18)"
+If the computed hash differs from `pairing_hash` in the task's state (and `pairing_hash` is not empty → this is not the first attempt), AND the latest commit on the branch does NOT have `Phase-Transition: true` as a trailer, halt: "Pairing hash drift on task <identifier> — pairing was edited mid-run. Restore the pinned version or migrate to a new branch. (R7.18)"
 
 ### 6.2 Build experience brief
 
 From the `experience_brief` list derived in Step 5, format:
 
 ```
-Prior attempts on this task (<slug>):
+Prior attempts on this task (<identifier>):
 
 ⊗ Attempt 1 [eval: <eval-id>]:
   <problem>
@@ -202,9 +202,9 @@ This brief is included in the agent's CLAUDE.md template (injected by WorktreeCr
 
 ```bash
 REPO_HASH=$(git -C <project-root> rev-parse --show-toplevel | shasum | cut -c1-7)
-WORKTREE_PATH="$HOME/.claude/darwin-worktrees/$REPO_HASH/<task-slug>"
-SIGNAL_PATH="$HOME/.claude/darwin-state/$REPO_HASH/<task-slug>/signal.json"
-AGENT_NAME="<task-slug>-attempt-<N>"   # N = attempt_count + 1
+WORKTREE_PATH="$HOME/.claude/darwin-worktrees/$REPO_HASH/<task-identifier>"
+SIGNAL_PATH="$HOME/.claude/darwin-state/$REPO_HASH/<task-identifier>/signal.json"
+AGENT_NAME="<task-identifier>-attempt-<N>"   # N = attempt_count + 1
 ```
 
 ### 6.4 Write [task-state] — crash recovery commit point
@@ -223,18 +223,18 @@ Commit this change to the plan file NOW, before calling the Agent tool. This is 
 
 ```bash
 git add <plan.adoc>
-git commit -m "chore: task <slug> status → running (attempt <N>)"
+git commit -m "chore: task <identifier> status → running (attempt <N>)"
 ```
 
 ### 6.5 Write manifest for WorktreeCreate hook
 
 ```bash
-mkdir -p "$HOME/.claude/darwin-state/$REPO_HASH/<task-slug>"
-cat > "$HOME/.claude/darwin-state/$REPO_HASH/<task-slug>/manifest.json" <<EOF
+mkdir -p "$HOME/.claude/darwin-state/$REPO_HASH/<task-identifier>"
+cat > "$HOME/.claude/darwin-state/$REPO_HASH/<task-identifier>/manifest.json" <<EOF
 {
   "project_root":        "<absolute-path-to-project>",
   "base_ref":            "<base-ref>",
-  "branch":              "agent/<slug>",
+  "branch":              "agent/<identifier>",
   "pairing_name":        "<pairing-name>",
   "writable_globs":      <from pairing.scope.writable_globs>,
   "readonly_globs":      <from pairing.scope.readonly_globs>,
@@ -298,9 +298,9 @@ eval_thinking += response.usage.thinking_tokens   # 0 for non-thinking judges
 **Pass (●):**
 ```bash
 git -C "$WORKTREE_PATH" commit --allow-empty -m \
-  "● <task-description> ◈ <model-short> (#<slug>)" \
+  "● <task-description> ◈ <model-short> (#<identifier>)" \
   --trailer "Try-Status: pass" \
-  --trailer "Task: <slug>" \
+  --trailer "Task: <identifier>" \
   --trailer "Pairing: <pairing-name>" \
   --trailer "Pairing-Hash: sha256:<hash>" \
   --trailer "Tier: <N>" \
@@ -323,9 +323,9 @@ Update `[task-state]` to `status: ●`. Task is done.
 ```bash
 # Failure commit
 git -C "$WORKTREE_PATH" commit --allow-empty -m \
-  "⊗ <reason> ◈ <model-short> (<slug>)" \
+  "⊗ <reason> ◈ <model-short> (<identifier>)" \
   --trailer "Try-Status: fail" \
-  --trailer "Task: <slug>" \
+  --trailer "Task: <identifier>" \
   --trailer "Pairing: <pairing-name>" \
   --trailer "Pairing-Hash: sha256:<hash>" \
   --trailer "Tier: <N>" \
@@ -353,7 +353,7 @@ git -C "$WORKTREE_PATH" commit --allow-empty -m \
 git -C "$WORKTREE_PATH" revert --no-edit HEAD
 git -C "$WORKTREE_PATH" commit --amend --no-edit \
   --trailer "Try-Status: rollback" \
-  --trailer "Task: <slug>" \
+  --trailer "Task: <identifier>" \
   --trailer "Reset-From: <fail-sha>" \
   --trailer "Reset-To: <base-sha>"
 ROLLBACK_SHA=$(git -C "$WORKTREE_PATH" rev-parse HEAD)
@@ -396,8 +396,8 @@ After completing each task, estimate current context token usage. If usage is at
 2. Print:
    ```
    Context limit approaching. Re-invoke /darwin:worktree to continue.
-   Completed tasks: <list of ● slugs>
-   Remaining tasks: <list of pending slugs>
+   Completed tasks: <list of ● identifiers>
+   Remaining tasks: <list of pending identifiers>
    ```
 3. Stop. The next session will reconstruct state from Git + `[task-state]`.
 
@@ -409,7 +409,7 @@ For parallel (unordered) tasks, fan out using concurrent Agent tool calls. All r
 
 For serial (ordered) tasks, check upstream dependency status before starting each task:
 ```bash
-git log agent/<upstream-slug> --format='%(trailers:only,key=Try-Status)' | head -1
+git log agent/<upstream-identifier> --format='%(trailers:only,key=Try-Status)' | head -1
 ```
 Proceed only if `Try-Status: pass`.
 
@@ -420,9 +420,9 @@ Proceed only if `Try-Status: pass`.
 For each co-evolving pair, run `tests` and `impl` as independent concurrent Ralph loops. Before committing `●` on the `impl` branch, perform the **tests gate check** (pure Git — no external state):
 
 ```bash
-TESTS_PASS=$(git log agent/<slug>/tests --format='%ct %(trailers:only,key=Try-Status)' \
+TESTS_PASS=$(git log agent/<identifier>/tests --format='%ct %(trailers:only,key=Try-Status)' \
   | awk '/Try-Status: pass/{print $1; exit}')
-IMPL_FAIL=$(git log agent/<slug>/impl  --format='%ct %(trailers:only,key=Try-Status)' \
+IMPL_FAIL=$(git log agent/<identifier>/impl  --format='%ct %(trailers:only,key=Try-Status)' \
   | awk '/Try-Status: fail/{print $1; exit}')
 ```
 
@@ -458,7 +458,7 @@ When all tasks are `●`:
 Darwin complete.
 
 Tasks completed:
-  ● <slug> — <N> attempt(s) — tier <T> — <agent_input + eval_input> total input tokens
+  ● <identifier> — <N> attempt(s) — tier <T> — <agent_input + eval_input> total input tokens
   ...
 
 Total tokens (this session):
@@ -468,13 +468,13 @@ Total tokens (this session):
 
 If any task is `⊖` (HANDOFF):
 1. Write `HANDOFF.md` in the agent's worktree path (from `[task-state].worktree_path`) with the following sections:
-   - **Header:** task slug, pairing name, branch, last commit SHA, models used across all attempts
-   - **Trigger:** trigger reason (one of: circuit-breaker exhausted / ladder exhausted / needs-human / upstream-constraint with upstream slug)
+   - **Header:** task identifier, pairing name, branch, last commit SHA, models used across all attempts
+   - **Trigger:** trigger reason (one of: circuit-breaker exhausted / ladder exhausted / needs-human / upstream-constraint with upstream identifier)
    - **What this task was trying to do:** the original task description from the asset `.adoc`
    - **Attempts summary table:** for each attempt — attempt #, tier, model, triggering eval ID, eval type, failure class, problem
    - **Current hypothesis:** the hypothesis from the final `⊗` commit
    - **Evidence:** the evidence from the final `⊗` commit
    - **Unblocking options:** ordered list of concrete next steps for a human to try
-   - **Resume command:** `/darwin:worktree <plan.adoc> --resume <slug>`
-2. Print: "HANDOFF generated for <slug>. Review HANDOFF.md. Re-invoke /darwin:worktree --resume <slug> after addressing the issue."
+   - **Resume command:** `/darwin:worktree <plan.adoc> --resume <identifier>`
+2. Print: "HANDOFF generated for <identifier>. Review HANDOFF.md. Re-invoke /darwin:worktree --resume <identifier> after addressing the issue."
 3. Stop.

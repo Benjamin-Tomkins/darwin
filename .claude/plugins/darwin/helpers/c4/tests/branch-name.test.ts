@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { branchName } from '../src/branch-name.js';
 
 describe('branchName', () => {
-  it('produces agent/<slug> for a single-element chain', () => {
+  it('produces agent/<identifier> for a single-element chain', () => {
     expect(branchName(['hello-world'])).toBe('agent/hello-world');
   });
 
@@ -10,7 +10,7 @@ describe('branchName', () => {
     expect(branchName(['hello-world', 'greeter'], 'impl')).toBe('agent/hello-world/greeter/impl');
   });
 
-  it('handles a three-level slug chain', () => {
+  it('handles a three-level identifier chain', () => {
     expect(branchName(['project', 'container', 'component'], 'tests'))
       .toBe('agent/project/container/component/tests');
   });
@@ -19,7 +19,7 @@ describe('branchName', () => {
     expect(branchName(['project', 'api'])).toBe('agent/project/api');
   });
 
-  it('throws on an empty slug chain', () => {
+  it('throws on an empty identifier chain', () => {
     expect(() => branchName([])).toThrow();
   });
 });

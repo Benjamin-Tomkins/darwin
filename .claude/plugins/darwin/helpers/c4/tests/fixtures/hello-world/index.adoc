@@ -8,13 +8,13 @@ workspace "hello-world" {
   model {
     softwareSystem "Greeter" "A simple greeting service" {
       properties {
-        slug greeter
+        identifier greeter
         impl greeter-impl.adoc
         tests greeter-tests.adoc
       }
       container "API" "The HTTP API layer" {
         properties {
-          slug api
+          identifier api
           impl api-impl.adoc
         }
       }
